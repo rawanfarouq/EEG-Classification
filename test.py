@@ -59,15 +59,22 @@ def read_csv_eeg(file_path):
     df = pd.read_csv(file_path)   # Read the CSV file using pandas
     
     # Check if all data in the DataFrame are numeric
-    if not df.applymap(np.isreal).all().all():
-        print(f"Skipping file {file_path} because it contains non-numeric data.")
+    numeric_columns = []
+    for column in df.columns:
+        if df[column].dtype in [np.int64, np.float64]:
+            numeric_columns.append(column)
+        else:
+            print(f"Skipping column '{column}' in file {file_path} because it contains non-numeric data.")
+    
+    if not numeric_columns:
+        print(f"Skipping file {file_path} because it contains no numeric columns.")
         return None
 
     # Extract EEG data from DataFrame
-    eeg_data = df.values.T  # Transpose the DataFrame to have channels as rows and samples as columns
+    eeg_data = df[numeric_columns].values.T  # Transpose the DataFrame to have channels as rows and samples as columns
 
     # Create info structure for MNE
-    ch_names = df.columns.tolist()  # Extract column names as channel names
+    ch_names = numeric_columns  # Extract column names as channel names
     ch_types = ['eeg'] * len(ch_names)  # Assuming all channels are EEG
     sfreq = 1000  # Set sampling frequency (adjust as needed)
 
@@ -78,53 +85,54 @@ def read_csv_eeg(file_path):
 
     return raw
 
-# def visualize_eeg(file_paths):
-#     for file_path in file_paths:
-#         if file_path.endswith('.csv'):
-#             folder_name, file_name = os.path.split(file_path)
-#             print(f"File: {file_name}")
 
-#             raw = read_csv_eeg(file_path)
+def visualize_eeg(file_paths):
+    for file_path in file_paths:
+        if file_path.endswith('.csv'):
+            folder_name, file_name = os.path.split(file_path)
+            print(f"File: {file_name}")
 
-#             if raw is None:
-#                 continue
+            raw = read_csv_eeg(file_path)
 
-#             # Plot EEG signals before filtering
-#             raw.plot(n_channels=len(raw.ch_names), title='EEG Signals before filtering', scalings='auto', show=False)
-#             pltp.subplots_adjust(hspace=1.0)  # Adjust vertical space between subplots
-#             pltp.show()
+            if raw is None:
+                continue
 
-#             # Filter data
-#             raw.filter(l_freq=0.5, h_freq=45)
+            # Plot EEG signals before filtering
+            raw.plot(n_channels=len(raw.ch_names), title='EEG Signals before filtering', scalings='auto', show=False)
+            pltp.subplots_adjust(hspace=1.0)  # Adjust vertical space between subplots
+            pltp.show()
 
-#             # Plot EEG signals after filtering
-#             raw.plot(n_channels=len(raw.ch_names), title='EEG Signals after filtering', scalings='auto', show=False)
-#             pltp.subplots_adjust(hspace=1.0)  # Adjust vertical space between subplots
-#             pltp.show()
+            # Filter data
+            raw.filter(l_freq=0.5, h_freq=45)
+
+            # Plot EEG signals after filtering
+            raw.plot(n_channels=len(raw.ch_names), title='EEG Signals after filtering', scalings='auto', show=False)
+            pltp.subplots_adjust(hspace=1.0)  # Adjust vertical space between subplots
+            pltp.show()
             
-#         elif file_path.endswith('.edf'):
-#             folder_name, file_name = os.path.split(file_path)
-#             print(f"File: {file_name}")
+        elif file_path.endswith('.edf'):
+            folder_name, file_name = os.path.split(file_path)
+            print(f"File: {file_name}")
 
-#             raw=mne.io.read_raw_edf(file_path,preload=True)
+            raw=mne.io.read_raw_edf(file_path,preload=True)
                 
-#             if raw is None:
-#                 continue
+            if raw is None:
+                continue
 
-#             # Plot EEG signals before filtering
-#             raw.plot(n_channels=len(raw.ch_names), title='EEG Signals before filtering', scalings='auto', show=False)
-#             pltp.subplots_adjust(hspace=1.0)  # Adjust vertical space between subplots
-#             pltp.show()
+            # Plot EEG signals before filtering
+            raw.plot(n_channels=len(raw.ch_names), title='EEG Signals before filtering', scalings='auto', show=False)
+            pltp.subplots_adjust(hspace=1.0)  # Adjust vertical space between subplots
+            pltp.show()
 
-#             # Filter data
-#             raw.filter(l_freq=0.5, h_freq=45)
+            # Filter data
+            raw.filter(l_freq=0.5, h_freq=45)
 
-#             # Plot EEG signals after filtering
-#             raw.plot(n_channels=len(raw.ch_names), title='EEG Signals after filtering', scalings='auto', show=False)
-#             pltp.subplots_adjust(hspace=1.0)  # Adjust vertical space between subplots
-#             pltp.show()
+            # Plot EEG signals after filtering
+            raw.plot(n_channels=len(raw.ch_names), title='EEG Signals after filtering', scalings='auto', show=False)
+            pltp.subplots_adjust(hspace=1.0)  # Adjust vertical space between subplots
+            pltp.show()
 
-# visualize_eeg(file_paths)
+visualize_eeg(file_paths)
 
 
 def extract_features_from_epochs(epochs):

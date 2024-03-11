@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home</title>
+</head>
+<body>
+    <div><h1>Home Page</h1></div>
+    <form id="folder-form" method="post">
+        <label for="folderPath">Folder Path:</label>
+        <input type="file" id="folderPath" name="folder_path">
+        <input type="button" value="Process Folder" onclick="processFolder()">
+    </form>
+    <div id="result"></div>
+</body>
+</html>
+
+<script>
+    function processFolder() {
+        var form = document.getElementById('folder-form');
+        var folderPath = document.getElementById('folderPath').value;
+        fetch('/views/process-folder', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'folder_path=' + encodeURIComponent(folderPath)
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('result').innerText = data.message;
+        })
+        .catch((error) => {
+            document.getElementById('result').innerText = 'Error: ' + error;
+        });
+    }
+    </script>

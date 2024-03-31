@@ -6,11 +6,14 @@ import pandas as pd
 import random
 import scipy.io
 import h5py
+import re
 import matplotlib.pyplot as plt
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -37,13 +40,14 @@ from mpl_toolkits.mplot3d import Axes3D
 from nilearn import plotting
 import plotly.graph_objects as go
 import cProfile
+from collections import defaultdict
 
 
 
 
 
 downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-dataverse_files_folder = os.path.join(downloads_folder, "edf")  # Combine with the folder name
+dataverse_files_folder = os.path.join(downloads_folder, "edf2")  # Combine with the folder name
 
 # Use glob to get a list of file paths matching a specific pattern
 file_paths = glob(os.path.join(dataverse_files_folder, '*.*'))  #Getting all files with any extension
@@ -61,6 +65,9 @@ def read_eeg_file(file_path):
             return None, None
         
         print(f"Number of samples (time points) in the recording: {len(df)}")
+
+        # unique_prefixes = get_unique_prefixes(df.columns)
+        # print("Unique prefixes:", unique_prefixes)
 
         if check_processed_from_columns(df, processed_data_keywords):
             print("The data appears to be processed.")
@@ -107,8 +114,8 @@ def read_edf_eeg(file_path):
         raw = mne.io.read_raw_edf(file_path, preload=True)
         sfreq = raw.info['sfreq']  # Gets the sampling frequency from the EDF file's header
 
-        # print(raw.info)  # Summarizes the info structure of the raw object
-        # print(raw.ch_names)  # List of all channel names
+        print("Raw info:",raw.info)  # Summarizes the info structure of the raw object
+        #print("Raw ch_names:",raw.ch_names)  # List of all channel names
         # print(raw.get_channel_types())  # List of channel types
         print(raw.to_data_frame().describe())  # For EDF files converted to DataFrame
 
@@ -245,16 +252,16 @@ def visualize_3d_brain_model(raw):
 
 
 
-def preprocess_channel_data(channel_data, sfreq, l_freq_hp, h_freq_lp, notch_freqs):
+def preprocess_channel_data(channel_data, sfreq, l_freq_hp, h_freq_lp):
     # High-pass filtering to remove slow drifts
-    channel_data = filter_data(channel_data, sfreq, l_freq=l_freq_hp, h_freq=None, verbose=False)
+    channel_data = filter_data(channel_data, sfreq, l_freq=l_freq_hp, h_freq=h_freq_lp, verbose=False)
     
     # Low-pass filtering to remove high-frequency noise
-    channel_data = filter_data(channel_data, sfreq, l_freq=None, h_freq=h_freq_lp, verbose=False)
+    #channel_data = filter_data(channel_data, sfreq, l_freq=None, h_freq=h_freq_lp, verbose=False)
     
     # Notch filter to remove power line noise at 50 Hz or 60 Hz and its harmonics
-    for notch_freq in notch_freqs:
-        channel_data = filter_data(channel_data, sfreq, l_freq=notch_freq - 0.1, h_freq=notch_freq + 0.1, method='iir', verbose=False)
+    # for notch_freq in notch_freqs:
+    #     channel_data = filter_data(channel_data, sfreq, l_freq=notch_freq - 0.1, h_freq=notch_freq + 0.1, method='iir', verbose=False)
     
     return channel_data
 
@@ -269,7 +276,7 @@ def preprocess_raw_eeg(raw, sfreq):
     
 
     # Notch filter to remove power line noise at 50 Hz or 60 Hz and its harmonics
-    notch_freqs = np.arange(50, sfreq / 2, 50)  # Assuming 50 Hz power line noise
+    #notch_freqs = np.arange(50, sfreq / 2, 50)  # Assuming 50 Hz power line noise
 
     # Instantiate NoisyChannels with the filtered raw data
     noisy_detector = NoisyChannels(raw)
@@ -296,7 +303,7 @@ def preprocess_raw_eeg(raw, sfreq):
     raw = ica.apply(raw)
 
     for i, channel in enumerate(eeg_data):
-        preprocessed_data[i] = preprocess_channel_data(channel, sfreq, l_freq_hp=0.5, h_freq_lp=40.0, notch_freqs=notch_freqs)
+        preprocessed_data[i] = preprocess_channel_data(channel, sfreq, l_freq_hp=0.5, h_freq_lp=45.0)
     
     # Create an MNE RawArray object with the preprocessed data
     ch_names = ['EEG %03d' % i for i in range(preprocessed_data.shape[0])]  # Create channel names
@@ -327,14 +334,14 @@ def extract_features_from_channel(channel_data, sfreq, epoch_length=1.0):
         average_val = np.mean(epoch) 
        
 
-        # Frequency-domain features
-        fft_vals = rfft(epoch)
-        psd_vals = np.abs(fft_vals) ** 2
-        freq_res = np.fft.rfftfreq(n=len(epoch), d=1.0 / sfreq)
+        # # Frequency-domain features
+        # fft_vals = rfft(epoch)
+        # psd_vals = np.abs(fft_vals) ** 2
+        # freq_res = np.fft.rfftfreq(n=len(epoch), d=1.0 / sfreq)
         
 
-        # Welch's method to estimate power spectral density
-        f, psd_welch = welch(epoch, sfreq)
+        # # Welch's method to estimate power spectral density
+        # f, psd_welch = welch(epoch, sfreq)
 
         # Define frequency bands of interest (bands)
         bands = {
@@ -352,26 +359,29 @@ def extract_features_from_channel(channel_data, sfreq, epoch_length=1.0):
             'skew': skew_val,
             'rms': rms_val,
             'variance': variance_val,
-            'average': average_val,  # This is redundant as it's the same as mean
+           'peak_to_peak': np.ptp(epoch),
+            # 'zero_crossing_rate': ((epoch[:-1] * epoch[1:]) < 0).sum() / (epoch_length * sfreq),
+            # 'signal_magnitude_area': np.trapz(np.abs(epoch), dx=1/sfreq),
+            'waveform_length': np.sum(np.abs(np.diff(epoch))),
         }
         # Calculate power in each frequency band
        
-        for band, (fmin, fmax) in bands.items():
-            # Find the power spectral density within the band
-            band_inds = np.where((f >= fmin) & (f <= fmax))[0]
-            band_psd = psd_welch[band_inds]
+        # for band, (fmin, fmax) in bands.items():
+        #     # Find the power spectral density within the band
+        #     band_inds = np.where((f >= fmin) & (f <= fmax))[0]
+        #     band_psd = psd_welch[band_inds]
             
-            # Find the peak frequency and its power
-            peak_freq = f[band_inds][np.argmax(band_psd)]
-            peak_power = np.max(band_psd)
+        #     # Find the peak frequency and its power
+        #     peak_freq = f[band_inds][np.argmax(band_psd)]
+        #     peak_power = np.max(band_psd)
             
-            features[f'{band}_peak_freq'] = peak_freq
-            features[f'{band}_peak_power'] = peak_power
+        #     features[f'{band}_peak_freq'] = peak_freq
+        #     features[f'{band}_peak_power'] = peak_power
         
-
 
         # Append the features of the current epoch to the list
         features_list.append(features)
+  
     
     return features_list
 
@@ -415,6 +425,64 @@ def extract_features_mat(raw, sfreq, labels, epoch_length=1.0):
     # Add the labels to the features DataFrame
     feature_df['label'] = labels
 
+    return feature_df
+
+
+
+def extract_features_edf(raw, epoch_length=1.0):
+    # Define the epochs data structure
+    events = mne.make_fixed_length_events(raw, duration=epoch_length)
+    epochs = mne.Epochs(raw, events, tmin=0.0, tmax=epoch_length, baseline=None, preload=True)
+    
+    # Initialize a list to hold features from all epochs
+    all_features = []
+
+    # Extract features for each epoch
+    for _, epoch in enumerate(epochs):
+        # Initialize a dictionary to hold features for the current epoch
+        features = {}
+        
+        # Apply FFT to the epoch
+        fft_vals = rfft(epoch, axis=1)
+        
+        # Compute power spectral density (PSD)
+        psd_vals = np.abs(fft_vals) ** 2
+        
+        # Frequency resolution
+        freq_res = np.fft.rfftfreq(n=epoch.shape[1], d=1.0 / epochs.info['sfreq'])
+        
+        # Define frequency bands of interest (example bands)
+        bands = {
+            'delta': (0.5, 4),
+            'theta': (4, 8),
+            'alpha': (8, 12),
+            'beta': (12, 30),
+            'gamma': (30, 45)
+        }
+        
+        # Calculate power in each frequency band
+        for band, (fmin, fmax) in bands.items():
+            # Find the indexes of the frequencies that are within the band
+            freq_inds = np.where((freq_res >= fmin) & (freq_res <= fmax))[0]
+            
+            # Sum the PSD values within the band to get the band power
+            band_power = psd_vals[:, freq_inds].sum(axis=1)
+            # Average the band power across channels
+            mean_band_power = np.mean(band_power, axis=0)
+            
+            # Store the mean band power in the features dictionary
+            features[f'{band}_power'] = mean_band_power
+        
+        # Add entropy of the distribution of power values
+        features['entropy'] = entropy(np.mean(psd_vals, axis=0))
+        
+        #print("test1:", features)  # debug
+        # Append the features of the current epoch to the list
+        all_features.append(features)
+    
+    # Create a DataFrame from the features list
+    feature_df = pd.DataFrame(all_features)
+    
     return feature_df
 
 def check_processed_from_columns(df, keywords):
@@ -568,6 +636,25 @@ class EEGToDataFrame(BaseEstimator, TransformerMixin):
         return df
       
 
+def get_subject_identifier(file_path):
+    # Extracts 'sub-001' from 'sub-001_ses-01_task_motorimagery_eeg.edf'
+    return file_path.split('_')[0]
+
+def get_unique_prefixes(column_names):
+    # Use a set to keep track of unique prefixes
+    unique_prefixes = set()
+    
+    # Regular expression to match the prefix before the first underscore
+    pattern = re.compile(r'^[^_]+')
+    
+    for name in column_names:
+        # Use the regex pattern to search for the prefix
+        match = pattern.search(name)
+        if match:
+            unique_prefixes.add(match.group(0))
+    
+    # Return a sorted list of unique prefixes
+    return sorted(unique_prefixes)
 
 
 def main():
@@ -584,32 +671,82 @@ def main():
     subject_data = {}
     
 
-    process_with_builtin_functions = True   #Toggling
-    proces_with_builtin_accuracy= True
-    csv_and_edf= False
+    process_with_builtin_functions = False   #Toggling
+    proces_with_builtin_accuracy= False
+    csv_only= False
+    edf_only=False
+
+    accuracy_dict_rnd = defaultdict(list)
+    accuracy_dict_svc = defaultdict(list)
+    accuracy_dict_gbc = defaultdict(list)
+    accuracy_dict_knn = defaultdict(list)
+
+    total_accuracy_dict_rnd = {}
+    total_accuracy_dict_svc = {}
+    total_accuracy_dict_gbc = {}
+    total_accuracy_dict_knn={}
+    subject_session_counts = {}
 
     for file_path in file_paths:
         
         
         # Determine the type of file and handle it accordingly
         if file_path.lower().endswith(('.csv', '.xls', '.xlsx', '.xlsm', '.xlsb')):
-            csv_and_edf= True
+            csv_only= True
             raw_data, sfreq = read_eeg_file(file_path)
             # picks = random.sample(df_or_raw.ch_names, 10)
             # plot_raw_eeg(df_or_raw, title=f'EEG Data from {file_path}', picks=picks)
+
+            if isinstance(raw_data, mne.io.RawArray):
+                # Convert to DataFrame here
+                data_df = raw_data.to_data_frame()
+            
+                identified_methods = identify_feature_extraction_methods(data_df, processed_data_keywords)
+                if identified_methods:
+                    print(f"The following feature extraction methods were identified: {', '.join(identified_methods)}")
+                    
+                    # Identify calculation methods for each band of interest
+                    for band in ['theta', 'alpha', 'beta', 'gamma']:
+                        band_columns = [col for col in data_df.columns if band in col.lower()]
+                        for col in band_columns:
+                            method = identify_calculation_method(col, processed_data_keywords)
+                            print(f"The {band} band feature '{col}' is calculated using: {method}")
+
+                else:
+                    print("There is no extracted feature methods")  
+
+            else:
+                identified_methods = identify_feature_extraction_methods(raw_data, processed_data_keywords)
+                if identified_methods:
+                    print(f"The following feature extraction methods were identified: {', '.join(identified_methods)}")
+                    
+                    # Identify calculation methods for each band of interest
+                    for band in ['theta', 'alpha', 'beta', 'gamma']:
+                        band_columns = [col for col in raw_data.columns if band in col.lower()]
+                        for col in band_columns:
+                            method = identify_calculation_method(col, processed_data_keywords)
+                            print(f"The {band} band feature '{col}' is calculated using: {method}")
+
+
+            
             process_processed_data(raw_data, sfreq)
 
         elif file_path.lower().endswith('.edf'):
-            csv_and_edf= True
+            edf_only= True
             raw_data, sfreq = read_edf_eeg(file_path)
             # picks = random.sample(df_or_raw.ch_names, 10)
             # plot_raw_eeg(df_or_raw, title=f'EEG Data from {file_path}', picks=picks)
-            #process_processed_data(raw_data, sfreq)
+           #preprocessed_raw= preprocess_raw_eeg(raw_data, sfreq)
+            features_df = extract_features_edf(raw_data,epoch_length=1.0)
+            all_features = pd.concat([all_features, features_df], ignore_index=True)
+            print("Last column:", all_features.iloc[:, -1])
+            print("All features shape:", all_features.shape)
+
 
         elif file_path.lower().endswith('.mat'):
 
             filename = os.path.basename(file_path)  # Extract the filename from the file path
-            subject_identifier = filename.split('_')[0]  # sub-XXX_ses-XX
+            subject_identifier = filename.split('_')[0] + '_' + filename.split('_')[1]  # sub-XXX_ses-XX
 
             
             if process_with_builtin_functions:
@@ -679,7 +816,7 @@ def main():
 
                     # Define a pipeline with modeling step only, as tsfresh has already done the scaling and feature selection
                     pipeline = Pipeline([
-                        ('classifier', RandomForestClassifier(random_state=42))  # Modeling step
+                        ('classifier', RandomForestClassifier())  # Modeling step
                     ])
 
                     # Train the model using the pipeline
@@ -687,6 +824,65 @@ def main():
 
                     # Make predictions
                     y_pred = pipeline.predict(X_test)
+
+                    accuracy = accuracy_score(y_test, y_pred)
+                    print(f"Random Accuracy for {subject_identifier}: {accuracy * 100:.2f}%")
+
+                    # Store the accuracy in accuracy_dict_rnd for RandomForestClassifier
+                    accuracy_dict_rnd[subject_identifier].append(accuracy)
+
+                    #SUPPORT VECTOR MACHINE
+
+                    pipeline_svc = Pipeline([
+                        ('classifier', SVC())  # Modeling step
+                    ])
+
+                    # Train the model using the pipeline
+                    pipeline_svc.fit(X_train, y_train)
+
+                    # Make predictions
+                    y_pred_svc = pipeline_svc.predict(X_test)
+
+                    accuracy_svc = accuracy_score(y_test, y_pred_svc)
+                    print(f"SVM Accuracy for {subject_identifier}: {accuracy_svc * 100:.2f}%")
+
+                    accuracy_dict_svc[subject_identifier].append(accuracy_svc)
+
+                    #GRADIENT CLASSIFICATION
+
+                    pipeline_gdn = Pipeline([
+                        ('classifier', GradientBoostingClassifier())  # Modeling step
+                    ])
+
+                    # Train the model using the pipeline
+                    pipeline_gdn.fit(X_train, y_train)
+
+                    # Make predictions
+                    y_pred_gdn = pipeline_gdn.predict(X_test)
+
+                    accuracy_gdn = accuracy_score(y_test, y_pred_gdn)
+                    print(f"Gradient Accuracy for {subject_identifier}: {accuracy_gdn * 100:.2f}%")
+
+                    accuracy_dict_gbc[subject_identifier].append(accuracy_gdn)
+
+                    #K-NN CLASSIFIER
+
+                    pipeline_knn = Pipeline([
+                        ('classifier', MLPClassifier(hidden_layer_sizes=(50,), max_iter=300, alpha=0.001,
+                    solver='sgd', random_state=21, tol=0.000000001))  # Modeling step
+                    ])
+
+                    # Train the model using the pipeline
+                    pipeline_knn.fit(X_train, y_train)
+
+                    # Make predictions
+                    y_pred_knn = pipeline_knn.predict(X_test)
+
+                    accuracy_knn = accuracy_score(y_test, y_pred_knn)
+                    print(f"KNN Accuracy for {subject_identifier}: {accuracy_knn * 100:.2f}%")
+
+                    accuracy_dict_knn[subject_identifier].append(accuracy_knn)
+
 
                     # Store true labels and predictions
                     all_true_labels.extend(y_test)
@@ -717,11 +913,43 @@ def main():
             print(f"File {file_path} is not a recognized EEG file type.")
             continue
 
-    if proces_with_builtin_accuracy:    
-        for subject, data in subject_data.items():
-            overall_accuracy = accuracy_score(data['true_labels'], data['predictions'])
-            print(f"Overall accuracy for {subject}: {overall_accuracy * 100:.2f}%")  
+    if proces_with_builtin_accuracy: 
+        print("Accuracy Dictionary:",accuracy_dict_rnd)
+  
+        # for subject, data in subject_data.items():
+        #     print(f"Accuracy for {subject_identifier}: {accuracy * 100:.2f}%") 
 
+        for subject_session in accuracy_dict_rnd:
+            
+            # Extract the subject identifier without the session
+            subject_identifier = subject_session.rsplit('_', 1)[0]
+            # Sum the accuracies for RandomForest
+            total_accuracy_dict_rnd[subject_identifier] = total_accuracy_dict_rnd.get(subject_identifier, 0) + sum(accuracy_dict_rnd[subject_session])
+            # Sum the accuracies for SVC
+            total_accuracy_dict_svc[subject_identifier] = total_accuracy_dict_svc.get(subject_identifier, 0) + sum(accuracy_dict_svc[subject_session])
+            # Sum the accuracies for GradientBoosting
+            total_accuracy_dict_gbc[subject_identifier] = total_accuracy_dict_gbc.get(subject_identifier, 0) + sum(accuracy_dict_gbc[subject_session])
+
+            total_accuracy_dict_knn[subject_identifier] = total_accuracy_dict_knn.get(subject_identifier, 0) + sum(accuracy_dict_knn[subject_session])
+
+            # Count the number of sessions for each subject
+            subject_session_counts[subject_identifier] = subject_session_counts.get(subject_identifier, 0) + len(accuracy_dict_rnd[subject_session])
+
+        # Now calculate the average accuracy for each classifier for each subject
+        average_accuracy_dict_rnd = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_rnd.items()}
+        average_accuracy_dict_svc = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_svc.items()}
+        average_accuracy_dict_gbc = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_gbc.items()}
+        average_accuracy_dict_knn = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_knn.items()}
+
+
+        # Print the average accuracy for each subject
+        for subject in average_accuracy_dict_rnd.keys():
+            print(f"Subject {subject} Average Accuracy RandomForest: {average_accuracy_dict_rnd[subject] * 100:.2f}%")
+            print(f"Subject {subject} Average Accuracy SVC: {average_accuracy_dict_svc[subject] * 100:.2f}%")
+            print(f"Subject {subject} Average Accuracy GradientBoosting: {average_accuracy_dict_gbc[subject] * 100:.2f}%")
+            print(f"Subject {subject} Average Accuracy KNN: {average_accuracy_dict_knn[subject] * 100:.2f}%")
+
+           
     else:        
     # This part should be outside (below) the for loop that goes through file_paths
         for subject_identifier, data in subject_data.items():
@@ -739,15 +967,16 @@ def main():
             X_test = scaler.transform(X_test)
 
             # Fit the model (you can choose SVC, RandomForestClassifier, or GradientBoostingClassifier as shown in your code)
-            clf_rnd = RandomForestClassifier(n_estimators=50, random_state=42)
+            clf_rnd = RandomForestClassifier()
             clf_rnd.fit(X_train, y_train)
 
             # Predict on the test data
             y_pred_rnd = clf_rnd.predict(X_test)
 
             # Calculate the accuracy
-            acc = accuracy_score(y_test, y_pred_rnd)
-            print(f"Accuracy RandomForest for subject {subject_identifier}: {acc * 100:.2f}%")
+            acc_rnd = accuracy_score(y_test, y_pred_rnd)
+            print(f"Accuracy RandomForest for subject {subject_identifier}: {acc_rnd * 100:.2f}%")
+            accuracy_dict_rnd[subject_identifier].append(acc_rnd)
 
             # Fit the model (you can choose SVC, RandomForestClassifier, or GradientBoostingClassifier as shown in your code)
             clf_SVC = SVC()
@@ -757,18 +986,65 @@ def main():
             y_pred_SVC = clf_SVC.predict(X_test)
 
             # Calculate the accuracy
-            acc = accuracy_score(y_test, y_pred_SVC)
-            print(f"Accuracy SVC for subject {subject_identifier}: {acc * 100:.2f}%")  
+            acc_svc = accuracy_score(y_test, y_pred_SVC)
+            print(f"Accuracy SVC for subject {subject_identifier}: {acc_svc * 100:.2f}%")  
+            accuracy_dict_svc[subject_identifier].append(acc_svc)
 
-            clf_gbc = GradientBoostingClassifier(n_estimators=50, random_state=42)
+            clf_gbc = GradientBoostingClassifier()
             clf_gbc.fit(X_train, y_train)
 
             # Predict on the test data
             y_pred_gbc = clf_gbc.predict(X_test)
 
             # Calculate the accuracy
-            acc = accuracy_score(y_test, y_pred_gbc)
-            print(f"Accuracy Gradient for subject {subject_identifier}: {acc * 100:.2f}%")  
+            acc_gbc = accuracy_score(y_test, y_pred_gbc)
+            print(f"Accuracy Gradient for subject {subject_identifier}: {acc_gbc * 100:.2f}%")
+            accuracy_dict_gbc[subject_identifier].append(acc_gbc)
+
+            clf_knn = MLPClassifier(hidden_layer_sizes=(40,), max_iter=500, alpha=0.001,
+                    solver='sgd', random_state=21, tol=0.000000001)
+            clf_knn.fit(X_train, y_train)
+
+            # Predict on the test data
+            y_pred_knn = clf_knn.predict(X_test)
+
+            # Calculate the accuracy
+            acc_knn = accuracy_score(y_test, y_pred_knn)
+            print(f"Accuracy Gradient for subject {subject_identifier}: {acc_knn * 100:.2f}%")
+            accuracy_dict_knn[subject_identifier].append(acc_knn)  
+        
+        for subject_session in accuracy_dict_rnd:
+            
+            # Extract the subject identifier without the session
+            subject_identifier = subject_session.rsplit('_', 1)[0]
+            # Sum the accuracies for RandomForest
+            total_accuracy_dict_rnd[subject_identifier] = total_accuracy_dict_rnd.get(subject_identifier, 0) + sum(accuracy_dict_rnd[subject_session])
+            # Sum the accuracies for SVC
+            total_accuracy_dict_svc[subject_identifier] = total_accuracy_dict_svc.get(subject_identifier, 0) + sum(accuracy_dict_svc[subject_session])
+            # Sum the accuracies for GradientBoosting
+            total_accuracy_dict_gbc[subject_identifier] = total_accuracy_dict_gbc.get(subject_identifier, 0) + sum(accuracy_dict_gbc[subject_session])
+
+            total_accuracy_dict_knn[subject_identifier] = total_accuracy_dict_knn.get(subject_identifier, 0) + sum(accuracy_dict_knn[subject_session])
+
+            # Count the number of sessions for each subject
+            subject_session_counts[subject_identifier] = subject_session_counts.get(subject_identifier, 0) + len(accuracy_dict_rnd[subject_session])
+
+        # Now calculate the average accuracy for each classifier for each subject
+        average_accuracy_dict_rnd = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_rnd.items()}
+        average_accuracy_dict_svc = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_svc.items()}
+        average_accuracy_dict_gbc = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_gbc.items()}
+        average_accuracy_dict_knn = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_knn.items()}
+
+
+        # Print the average accuracy for each subject
+        for subject in average_accuracy_dict_rnd.keys():
+            print(f"Subject {subject} Average Accuracy RandomForest: {average_accuracy_dict_rnd[subject] * 100:.2f}%")
+            print(f"Subject {subject} Average Accuracy SVC: {average_accuracy_dict_svc[subject] * 100:.2f}%")
+            print(f"Subject {subject} Average Accuracy GradientBoosting: {average_accuracy_dict_gbc[subject] * 100:.2f}%")
+            print(f"Subject {subject} Average Accuracy Knn: {average_accuracy_dict_knn[subject] * 100:.2f}%")
+
+
+           
 
 
 
@@ -781,7 +1057,7 @@ def main():
     #     print(f'All model accuracy across all files: {overall_accuracy * 100:.2f}%')
 
     # else:
-    if csv_and_edf:        
+    if csv_only | edf_only:        
         label_encoder = LabelEncoder()
            
         print("Length of all_features: ", len(all_features))
@@ -797,8 +1073,8 @@ def main():
         threshold = np.percentile(y_binned, 50)  # This is essentially the same as the median
         y = pd.cut(y_binned, bins=[-np.inf, threshold, np.inf], labels=[0, 1])
 
-        print("Y head:",y)  # To see the first few entries
-        print("Y unique:",y.unique())  # To see the unique values
+        print("Y head:",y_binned[:5])  # To see the first few entries
+        print("Y unique:",np.unique(y_binned))  # To see the unique values
 
         # Perform a train-test split
         X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2, random_state=42)
@@ -827,7 +1103,7 @@ def main():
         acc_rf = round(clf_rf.score(X_train, y_train) * 100, 2)
         print("Random Forest accuracy is:", (str(acc_rf) + '%'))
 
-        clf_gbc = GradientBoostingClassifier(n_estimators=50, learning_rate=1.0, max_depth=1, random_state=42)
+        clf_gbc = GradientBoostingClassifier(n_estimators=50, random_state=42)
 
         # Fit the classifier to the training data
         clf_gbc.fit(X_train, y_train)
@@ -839,11 +1115,11 @@ def main():
         acc_gbc = round(clf_gbc.score(X_train, y_train) * 100, 2)
         print("Gradient Boosting Classifier accuracy is:", (str(acc_gbc) + '%'))   
 
-        print("Classes distribution in training set:", np.unique(y_train, return_counts=True))
-        print("Classes distribution in testing set:", np.unique(y_test, return_counts=True))
+        # print("Classes distribution in training set:", np.unique(y_train, return_counts=True))
+        # print("Classes distribution in testing set:", np.unique(y_test, return_counts=True))
 
-        print("Unique classes in y_train:", np.unique(y_train))
-        print("Unique classes in y_test:", np.unique(y_test))  
+        # print("Unique classes in y_train:", np.unique(y_train))
+        # print("Unique classes in y_test:", np.unique(y_test))  
 
 
    

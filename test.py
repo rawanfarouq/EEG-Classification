@@ -22,6 +22,7 @@ from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator,TransformerMixin
 from sklearn.impute import SimpleImputer
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from tsfresh import select_features
 from tsfresh.feature_extraction import ComprehensiveFCParameters,extract_features,MinimalFCParameters
 from tsfresh.utilities.dataframe_functions import impute
@@ -35,6 +36,7 @@ from scipy.fft import rfft
 from scipy.signal import welch, find_peaks
 from pyprep.find_noisy_channels import NoisyChannels
 from mne.preprocessing import ICA
+from mne.decoding import CSP
 from eeglib.preprocessing import bandPassFilter
 from mpl_toolkits.mplot3d import Axes3D
 from nilearn import plotting
@@ -47,7 +49,7 @@ from collections import defaultdict
 
 
 downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-dataverse_files_folder = os.path.join(downloads_folder, "edf2")  # Combine with the folder name
+dataverse_files_folder = os.path.join(downloads_folder, "mat")  # Combine with the folder name
 
 # Use glob to get a list of file paths matching a specific pattern
 file_paths = glob(os.path.join(dataverse_files_folder, '*.*'))  #Getting all files with any extension
@@ -184,7 +186,6 @@ def read_mat_eeg(file_path):
     except Exception as e:
         print(f"An error occurred while processing {file_path}: {e}")
         return None, None, None
-    
     
     
 def visualize_3d_brain_model(raw):
@@ -656,6 +657,66 @@ def get_unique_prefixes(column_names):
     # Return a sorted list of unique prefixes
     return sorted(unique_prefixes)
 
+def extract_features_csp(raw, sfreq, labels, epoch_length=1.0):
+    print("Entering extract_features_csp method.")
+
+    # Define CSP
+    csp = CSP(n_components=4, reg=None, log=True, norm_trace=False)
+
+    # Get data from the Raw object and split into epochs
+    epochs = mne.make_fixed_length_epochs(raw, duration=epoch_length, preload=True, reject_by_annotation=False)
+    epochs_data = epochs.get_data()
+
+    # Ensure the number of epochs and labels match
+    min_len = min(len(epochs_data), len(labels))
+    epochs_data = epochs_data[:min_len]
+    labels = labels[:min_len]
+
+    # Fit CSP
+    csp.fit(epochs_data, labels)
+
+    # Transform the data using CSP to get the log-variance features
+    csp_features = csp.transform(epochs_data)
+
+    # Initialize a list to store combined features
+    combined_features = []
+
+    # Calculate time-domain features for each CSP-transformed epoch
+    for epoch in epochs_data:
+        epoch_features = []
+        for channel_data in epoch:
+            # Calculate traditional time-domain features for each channel
+            mean_val = np.mean(channel_data)
+            std_val = np.std(channel_data)
+            skew_val = skew(channel_data)
+            rms_val = np.sqrt(np.mean(channel_data**2))
+            variance_val = np.var(channel_data)
+            peak_to_peak_val = np.ptp(channel_data)
+            waveform_length_val = np.sum(np.abs(np.diff(channel_data)))
+
+            # Append channel features to epoch features
+            channel_features = [
+                mean_val, std_val, skew_val, 
+                rms_val, variance_val, 
+                peak_to_peak_val, waveform_length_val
+            ]
+            epoch_features.extend(channel_features)
+
+       
+        # Append to the combined features list
+        combined_features.append(epoch_features)
+
+    lda = LDA()
+    lda.fit(combined_features, labels[:len(epochs_data)])
+    combined_features = lda.transform(combined_features)    
+
+    # Create a DataFrame from the combined features
+    features_df = pd.DataFrame(combined_features)
+
+    # Add labels to the DataFrame
+    features_df['label'] = labels
+
+    return features_df
 
 def main():
 
@@ -671,8 +732,8 @@ def main():
     subject_data = {}
     
 
-    process_with_builtin_functions = False   #Toggling
-    proces_with_builtin_accuracy= False
+    process_with_builtin_functions = True   #Toggling
+    proces_with_builtin_accuracy= True
     csv_only= False
     edf_only=False
 
@@ -694,8 +755,8 @@ def main():
         if file_path.lower().endswith(('.csv', '.xls', '.xlsx', '.xlsm', '.xlsb')):
             csv_only= True
             raw_data, sfreq = read_eeg_file(file_path)
-            # picks = random.sample(df_or_raw.ch_names, 10)
-            # plot_raw_eeg(df_or_raw, title=f'EEG Data from {file_path}', picks=picks)
+            # picks = random.sample(raw_data.ch_names, 10)
+            # plot_raw_eeg(raw_data, title=f'EEG Data from {file_path}', picks=picks)
 
             if isinstance(raw_data, mne.io.RawArray):
                 # Convert to DataFrame here
@@ -713,7 +774,7 @@ def main():
                             print(f"The {band} band feature '{col}' is calculated using: {method}")
 
                 else:
-                    print("There is no extracted feature methods")  
+                    print("There is no known extracted feature methods")  
 
             else:
                 identified_methods = identify_feature_extraction_methods(raw_data, processed_data_keywords)
@@ -901,8 +962,11 @@ def main():
                 raw_data, sfreq, labels = read_mat_eeg(file_path) # Handling .mat file 
                  #fig = visualize_3d_brain_model(raw_data)
                 preprocessed_raw = preprocess_raw_eeg(raw_data, 250)
-                # Extract features from the preprocessed raw data and include labels
-                features_df = extract_features_mat(preprocessed_raw, sfreq, labels,epoch_length=1.0)
+
+                #features_df = extract_features_mat(preprocessed_raw, sfreq, labels,epoch_length=1.0)
+                features_df = extract_features_csp(preprocessed_raw, sfreq, labels, epoch_length=1.0)
+
+
                 if subject_identifier not in subject_data:
                     subject_data[subject_identifier] = {'features': pd.DataFrame(), 'labels': []}
                 # Append features and labels to the subject's data
@@ -944,10 +1008,10 @@ def main():
 
         # Print the average accuracy for each subject
         for subject in average_accuracy_dict_rnd.keys():
-            print(f"Subject {subject} Average Accuracy RandomForest: {average_accuracy_dict_rnd[subject] * 100:.2f}%")
-            print(f"Subject {subject} Average Accuracy SVC: {average_accuracy_dict_svc[subject] * 100:.2f}%")
-            print(f"Subject {subject} Average Accuracy GradientBoosting: {average_accuracy_dict_gbc[subject] * 100:.2f}%")
-            print(f"Subject {subject} Average Accuracy KNN: {average_accuracy_dict_knn[subject] * 100:.2f}%")
+            print(f"Subject {subject} Accuracy RandomForest: {average_accuracy_dict_rnd[subject] * 100:.2f}%")
+            print(f"Subject {subject} Accuracy SVC: {average_accuracy_dict_svc[subject] * 100:.2f}%")
+            print(f"Subject {subject} Accuracy GradientBoosting: {average_accuracy_dict_gbc[subject] * 100:.2f}%")
+            print(f"Subject {subject} Accuracy KNN: {average_accuracy_dict_knn[subject] * 100:.2f}%")
 
            
     else:        
@@ -1038,10 +1102,10 @@ def main():
 
         # Print the average accuracy for each subject
         for subject in average_accuracy_dict_rnd.keys():
-            print(f"Subject {subject} Average Accuracy RandomForest: {average_accuracy_dict_rnd[subject] * 100:.2f}%")
-            print(f"Subject {subject} Average Accuracy SVC: {average_accuracy_dict_svc[subject] * 100:.2f}%")
-            print(f"Subject {subject} Average Accuracy GradientBoosting: {average_accuracy_dict_gbc[subject] * 100:.2f}%")
-            print(f"Subject {subject} Average Accuracy Knn: {average_accuracy_dict_knn[subject] * 100:.2f}%")
+            print(f"Subject {subject} Accuracy RandomForest: {average_accuracy_dict_rnd[subject] * 100:.2f}%")
+            print(f"Subject {subject} Accuracy SVC: {average_accuracy_dict_svc[subject] * 100:.2f}%")
+            print(f"Subject {subject} Accuracy GradientBoosting: {average_accuracy_dict_gbc[subject] * 100:.2f}%")
+            print(f"Subject {subject} Accuracy Knn: {average_accuracy_dict_knn[subject] * 100:.2f}%")
 
 
            

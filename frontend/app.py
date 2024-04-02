@@ -1,10 +1,18 @@
+import webbrowser
+from threading import Timer
 from flask import Flask
-from views import views
+from frontend.views import views
+app = Flask(__name__)
 
-app= Flask(__name__)
-app.register_blueprint(views, url_prefix="/views")
+app.register_blueprint(views, url_prefix='/')
 
+@app.route('/')
+def hello():
+    return 'Hello, World!'
 
+def open_browser():
+      webbrowser.open_new('http://127.0.0.1:5000/')
 
 if __name__ == '__main__':
-    app.run(debug=True ,port=8000) #default port 5000 , debug is true means if u changed anything in the file it automatically updates iit on the website
+    Timer(1, open_browser).start()  # Wait 1 second before opening the browser
+    app.run(debug=True, use_reloader=False)

@@ -27,8 +27,8 @@ def files(fileName):
         df = loadData(file)
         subjectdata.append(df)
 
-    filtereddata = [noiseCancellation(df) for df in subjectdata]
-    extract(filtereddata)
+    #filtereddata = [noiseCancellation(df) for df in subjectdata]
+    extract(subjectdata)
 
 
 def loadData(fileName):

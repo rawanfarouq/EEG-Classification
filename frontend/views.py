@@ -11,7 +11,7 @@ print("Backend directory:", backend_dir)
 sys.path.insert(0, backend_dir)
 
 from backend.classification import read_eeg_file, read_edf_eeg, read_mat_eeg
-from backend.features import loadData
+from backend.features import files
 
 views = Blueprint('views', __name__)
 
@@ -43,8 +43,10 @@ def home():
                 raw, sfreq = read_eeg_file(file_path)
             elif extension == 'edf':
                 raw, sfreq = read_edf_eeg(file_path)
+                files(file_path)
             elif extension == 'mat':
                 raw, sfreq, labels = read_mat_eeg(file_path)
+                files(file_path)
 
             if raw is not None:
                 # Process was successful

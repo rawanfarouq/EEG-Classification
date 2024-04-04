@@ -11,6 +11,7 @@ print("Backend directory:", backend_dir)
 sys.path.insert(0, backend_dir)
 
 from backend.classification import read_eeg_file, read_edf_eeg, read_mat_eeg
+from backend.features import loadData
 
 views = Blueprint('views', __name__)
 

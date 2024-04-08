@@ -17,41 +17,37 @@ views = Blueprint('views', __name__)
 @views.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
-        # Check if the post request has the file part
-        if 'file_path' not in request.files:
-            return jsonify({"message": "No file part"}), 400
+        files = request.files.getlist('file_path')
         
-        file = request.files['file_path']
+        if not files:
+            return jsonify({"message": "No files uploaded"}), 400
         
-        # If the user does not select a file, the browser submits an
-        # empty file without a filename.
-        if file.filename == '':
-            return jsonify({"message": "No selected file"}), 400
-        
-        # Check if the file has an allowed filename
-        if file and '.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in {'csv', 'xls', 'edf', 'mat'}:
-            # Here you would typically save the file and then process it
-            filename = secure_filename(file.filename)             
-            downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-            file_path = os.path.join(downloads_folder, filename) 
-            file.save(file_path)
+        for file in files:
+            if file.filename == '':
+                return jsonify({"message": "No selected file"}), 400
             
-            # Call the appropriate function based on file extension
-            extension = file.filename.rsplit('.', 1)[1].lower()
-            if extension in {'.csv', '.xls', '.xlsx', '.xlsm', '.xlsb'}:
-                raw, sfreq = read_eeg_file(file_path)
-            elif extension == 'edf':
-                raw, sfreq = read_edf_eeg(file_path)
-            elif extension == 'mat':
-                raw, sfreq, labels = read_mat_eeg(file_path)
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
+                file_path = os.path.join(downloads_folder, filename)
+                file.save(file_path)
+                
+                extension = file.filename.rsplit('.', 1)[1].lower()
+                if file_path.lower().endswith(('.csv', '.xls', '.xlsx', '.xlsm', '.xlsb')):
+                    raw, sfreq = read_eeg_file(file_path)
+                elif extension == 'edf':
+                    raw, sfreq = read_edf_eeg(file_path)
+                elif extension == 'mat':
+                    raw, sfreq, labels = read_mat_eeg(file_path)
+                
+                if raw is None:
+                    return jsonify({"message": f"Failed to read file {filename}"}), 500
 
-            if raw is not None:
-                # Process was successful
-                return jsonify({"message": "File successfully read"}), 200
-            else:
-                # Process failed
-                return jsonify({"message": "Failed to read the file"}), 500
-        else:
-            return jsonify({"message": "Unsupported file type"}), 400
+        return jsonify({"message": "All files successfully read"}), 200
+    
     else:
         return render_template("index.html")
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'csv', 'xls', 'edf', 'mat', 'xlsx', 'xlsm', 'xlsb'}
+

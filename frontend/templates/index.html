@@ -8,8 +8,8 @@
 <body>
     <h1>EEG File Reader</h1>
     <form action="/" method="post" enctype="multipart/form-data">
-        <label for="file_path">Upload your EEG file:</label><br>
-        <input type="file" id="file_path" name="file_path" required><br>
+        <label for="file_path">Upload your EEG file or folder:</label><br>
+        <input type="file" id="file_path" name="file_path" webkitdirectory directory multiple required><br>
         <input type="submit" value="Submit">
     </form>
 

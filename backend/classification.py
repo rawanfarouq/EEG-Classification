@@ -49,7 +49,7 @@ from collections import defaultdict
 
 
 downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-dataverse_files_folder = os.path.join(downloads_folder, "mat")  # Combine with the folder name
+dataverse_files_folder = os.path.join(downloads_folder, "mat2")  # Combine with the folder name
 
 # Use glob to get a list of file paths matching a specific pattern
 file_paths = glob(os.path.join(dataverse_files_folder, '*.*'))  #Getting all files with any extension
@@ -718,38 +718,9 @@ def extract_features_csp(raw, sfreq, labels, epoch_length=1.0):
 
     return features_df
 
-def main():
-
-    global all_features
-    global labels_list
-    
-    all_features = pd.DataFrame()  # Initialize an empty DataFrame to hold all features
-    labels_list=[]
-    
-
-    all_true_labels = []
-    all_predictions = []
-    subject_data = {}
-    
-
-    process_with_builtin_functions = True   #Toggling
-    proces_with_builtin_accuracy= True
-    csv_only= False
-    edf_only=False
-
-    accuracy_dict_rnd = defaultdict(list)
-    accuracy_dict_svc = defaultdict(list)
-    accuracy_dict_gbc = defaultdict(list)
-    accuracy_dict_knn = defaultdict(list)
-
-    total_accuracy_dict_rnd = {}
-    total_accuracy_dict_svc = {}
-    total_accuracy_dict_gbc = {}
-    total_accuracy_dict_knn={}
-    subject_session_counts = {}
+def csv_identification():
 
     for file_path in file_paths:
-        
         
         # Determine the type of file and handle it accordingly
         if file_path.lower().endswith(('.csv', '.xls', '.xlsx', '.xlsm', '.xlsb')):
@@ -787,10 +758,47 @@ def main():
                         for col in band_columns:
                             method = identify_calculation_method(col, processed_data_keywords)
                             print(f"The {band} band feature '{col}' is calculated using: {method}")
+        process_processed_data(raw_data, sfreq)   #CHECK IT PLEASE
+                    
 
 
-            
-            process_processed_data(raw_data, sfreq)
+def main():
+
+    global all_features
+    global labels_list
+    
+    all_features = pd.DataFrame()  # Initialize an empty DataFrame to hold all features
+    labels_list=[]
+    
+
+    all_true_labels = []
+    all_predictions = []
+    subject_data = {}
+    
+
+    process_with_builtin_functions = False   #Toggling
+    proces_with_builtin_accuracy= False
+    csv_only= False
+    edf_only=False
+
+    accuracy_dict_rnd = defaultdict(list)
+    accuracy_dict_svc = defaultdict(list)
+    accuracy_dict_gbc = defaultdict(list)
+    accuracy_dict_knn = defaultdict(list)
+
+    total_accuracy_dict_rnd = {}
+    total_accuracy_dict_svc = {}
+    total_accuracy_dict_gbc = {}
+    total_accuracy_dict_knn={}
+    subject_session_counts = {}
+
+    for file_path in file_paths:
+        
+        
+        # Determine the type of file and handle it accordingly
+        if file_path.lower().endswith(('.csv', '.xls', '.xlsx', '.xlsm', '.xlsb')):
+            csv_only= True
+            csv_identification()
 
         elif file_path.lower().endswith('.edf'):
             edf_only= True

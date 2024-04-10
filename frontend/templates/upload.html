@@ -56,12 +56,19 @@
 </head>
 <body>
     <h1>EEG File Reader</h1>
-    <form action="/" method="post" enctype="multipart/form-data">
+    <form action="/upload" method="POST" enctype="multipart/form-data">
         <label for="file_path">Upload your EEG file or folder:</label><br>
         <input type="file" id="file_path" name="file_path" webkitdirectory directory multiple required><br>
         <input type="submit" value="Submit">
     </form>
 
+    <!-- Add this div to your upload.html where you want the alerts to appear -->
+    <div id="alertBox"></div>
+    
+
+
+
     <script src="/static/code.js"></script>
+
 </body>
 </html>

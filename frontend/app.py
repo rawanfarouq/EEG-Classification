@@ -27,6 +27,10 @@ def features():
 def results():
      return render_template('results.html')
 
+@app.route('/csv')
+def csv_files():
+     return render_template('csv_files.html')
+
 def open_browser():
       webbrowser.open_new('http://127.0.0.1:5000/')
 

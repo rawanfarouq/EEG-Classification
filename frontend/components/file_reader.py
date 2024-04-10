@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, flash,redirect,url_for
 from werkzeug.utils import secure_filename
 import sys
 import os
@@ -21,65 +21,61 @@ def upload():
         files = request.files.getlist('file_path')
         
         if not files:
-            return jsonify({"message": "No files uploaded"}), 400
-        
+            return render_template('alert.html', message="No files uploaded", alert_type='warning')
+
+
+        # Initialize a flag to check if all files are processed successfully
+        all_files_processed_successfully = True
+
         for file in files:
             if file.filename == '':
-                return jsonify({"message": "No selected file"}), 400
+                all_files_processed_successfully = False
+                return render_template('alert.html', message="No selected files", alert_type='warning')
+
             
             if file and allowed_file(file.filename):
                 filename = secure_filename(file.filename)
-                downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
+                downloads_folder = os.path.expanduser("~/Downloads")
                 file_path = os.path.join(downloads_folder, filename)
                 file.save(file_path)
-                
+
+                # Process the file based on its extension
                 extension = file.filename.rsplit('.', 1)[1].lower()
-                if file_path.lower().endswith(('.csv', '.xls', '.xlsx', '.xlsm', '.xlsb')):
-                    raw, sfreq = read_eeg_file(file_path)
-                elif extension == 'edf':
-                    raw, sfreq = read_edf_eeg(file_path)
-                elif extension == 'mat':
-                    raw, sfreq, labels = read_mat_eeg(file_path)
+                try:
+                    if extension in {'csv', 'xls', 'xlsx', 'xlsm', 'xlsb'}:
+                        raw, sfreq = read_eeg_file(file_path)
+                    elif extension == 'edf':
+                        raw, sfreq = read_edf_eeg(file_path)
+                    elif extension == 'mat':
+                        raw, sfreq, labels = read_mat_eeg(file_path)
+                    else:
+                        raise ValueError("Unsupported file type")
+                    
+                    if raw is None:
+                        raise ValueError(f"Failed to read file {filename}")
                 
-                if raw is None:
-                    return jsonify({"message": f"Failed to read file {filename}"}), 500
+                except ValueError as e:
+                    # If there's an error, remove the file and set the flag to False
+                    os.remove(file_path)
+                    all_files_processed_successfully = False
+                    return render_template('alert.html', message=str(e), alert_type='danger')
 
-        return jsonify({"message": "All files successfully read"}), 200
-    
-        # If the user does not select a file, the browser submits an
-        # empty file without a filename.
-        if file.filename == '':
-            return jsonify({"message": "No selected file"}), 400
-        
-        # Check if the file has an allowed filename
-        if file and '.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in {'csv', 'xls', 'edf', 'mat'}:
-            # Here you would typically save the file and then process it
-            filename = secure_filename(file.filename)             
-            downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-            file_path = os.path.join(downloads_folder, filename) 
-            file.save(file_path)
             
-            # Call the appropriate function based on file extension
-            extension = file.filename.rsplit('.', 1)[1].lower()
-            if extension in {'.csv', '.xls', '.xlsx', '.xlsm', '.xlsb'}:
-                raw, sfreq = read_eeg_file(file_path)
-            elif extension == 'edf':
-                raw, sfreq = read_edf_eeg(file_path)
-                files(file_path)
-            elif extension == 'mat':
-                raw, sfreq, labels = read_mat_eeg(file_path)
-                files(file_path)
-
-            if raw is not None:
-                # Process was successful
-                return jsonify({"message": "File successfully read"}), 200
             else:
-                # Process failed
-                return jsonify({"message": "Failed to read the file"}), 500
+                all_files_processed_successfully = False
+                return render_template('alert.html', message="Unsupported file type", alert_type='danger')
+
+
+        if all_files_processed_successfully:
+            # All files were processed successfully
+           return render_template('alert.html', message="All files successfully read", alert_type='success')
+
         else:
-            return jsonify({"message": "Unsupported file type"}), 400
+            # Not all files were processed, return an appropriate message
+            return render_template('alert.html', message="Some files were not processed successfully", alert_type='warning')
+
     else:
-        return render_template("index.html")
+        return render_template("upload.html")
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'csv', 'xls', 'edf', 'mat', 'xlsx', 'xlsm', 'xlsb'}

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            /* Customize the alert to match the submit button size */
+            #alert-container {
+                width: 300px; /* Match the width of your form */
+                margin: auto; /* Center the container */
+            }
+            .custom-alert {
+                padding: 0.5rem 1rem; /* Smaller padding */
+                margin-top: 1rem; /* Add some space above the alert */
+                font-size: 1.0rem; /* Smaller font size */
+            }
+        </style>
+    </head>
+    <body>
+        <div id="alert-container">
+            <!-- Apply custom-alert class for the size adjustments -->
+            <div class="alert alert-{{ alert_type }} custom-alert" role="alert">
+                {{ message }}
+            </div>
+        </div>
+    <script src="/static/code.js"></script>
+</body>
+</html>

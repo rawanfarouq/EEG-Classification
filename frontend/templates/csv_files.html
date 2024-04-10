@@ -1,0 +1,23 @@
+<!-- templates/csv_files.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Head content... -->
+    <title>CSV Files Page</title>
+</head>
+<body>
+    <h1>CSV Files Processed</h1>
+    <!-- Include any content you want here, such as a table of processed data -->
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <div>{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- Include the CSV component from the components folder -->
+    {% include 'components/csv.html' %}
+</body>
+</html>

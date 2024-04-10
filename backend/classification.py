@@ -49,7 +49,7 @@ from collections import defaultdict
 
 
 downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-dataverse_files_folder = os.path.join(downloads_folder, "mat2")  # Combine with the folder name
+dataverse_files_folder = os.path.join(downloads_folder, "emotions")  # Combine with the folder name
 
 # Use glob to get a list of file paths matching a specific pattern
 file_paths = glob(os.path.join(dataverse_files_folder, '*.*'))  #Getting all files with any extension
@@ -718,13 +718,16 @@ def extract_features_csp(raw, sfreq, labels, epoch_length=1.0):
 
     return features_df
 
-def csv_identification():
+def csv_identification(file_paths,processed_data_keywords):
+    global messages
+    messages=[]
+    csv_only=False
 
     for file_path in file_paths:
+        csv_only=True
         
         # Determine the type of file and handle it accordingly
         if file_path.lower().endswith(('.csv', '.xls', '.xlsx', '.xlsm', '.xlsb')):
-            csv_only= True
             raw_data, sfreq = read_eeg_file(file_path)
             # picks = random.sample(raw_data.ch_names, 10)
             # plot_raw_eeg(raw_data, title=f'EEG Data from {file_path}', picks=picks)
@@ -735,30 +738,36 @@ def csv_identification():
             
                 identified_methods = identify_feature_extraction_methods(data_df, processed_data_keywords)
                 if identified_methods:
-                    print(f"The following feature extraction methods were identified: {', '.join(identified_methods)}")
-                    
+                    message = f"The following feature extraction methods were identified: {', '.join(identified_methods)}"
+                    messages.append(message)                    
                     # Identify calculation methods for each band of interest
                     for band in ['theta', 'alpha', 'beta', 'gamma']:
                         band_columns = [col for col in data_df.columns if band in col.lower()]
                         for col in band_columns:
                             method = identify_calculation_method(col, processed_data_keywords)
-                            print(f"The {band} band feature '{col}' is calculated using: {method}")
+                            message = f"The {band} band feature '{col}' is calculated using: {method}"
+                            messages.append(message)
 
                 else:
-                    print("There is no known extracted feature methods")  
+                    messages.append("There is no known extracted feature methods")  
 
             else:
                 identified_methods = identify_feature_extraction_methods(raw_data, processed_data_keywords)
                 if identified_methods:
-                    print(f"The following feature extraction methods were identified: {', '.join(identified_methods)}")
-                    
-                    # Identify calculation methods for each band of interest
+                    message = f"The following feature extraction methods were identified: {', '.join(identified_methods)}"
+                    messages.append(message)                    
                     for band in ['theta', 'alpha', 'beta', 'gamma']:
                         band_columns = [col for col in raw_data.columns if band in col.lower()]
                         for col in band_columns:
                             method = identify_calculation_method(col, processed_data_keywords)
-                            print(f"The {band} band feature '{col}' is calculated using: {method}")
+                            method = identify_calculation_method(col, processed_data_keywords)
+                            message = f"The {band} band feature '{col}' is calculated using: {method}"
+                            messages.append(message)
+                else:
+                    messages.append("There is no known extracted feature methods")  
+
         process_processed_data(raw_data, sfreq)   #CHECK IT PLEASE
+    return messages,csv_only    
                     
 
 
@@ -798,7 +807,9 @@ def main():
         # Determine the type of file and handle it accordingly
         if file_path.lower().endswith(('.csv', '.xls', '.xlsx', '.xlsm', '.xlsb')):
             csv_only= True
-            csv_identification()
+            messages,csv_only=csv_identification(file_paths,processed_data_keywords)
+            for message in messages:
+                print("Message:", message)
 
         elif file_path.lower().endswith('.edf'):
             edf_only= True

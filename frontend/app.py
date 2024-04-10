@@ -2,13 +2,18 @@ import webbrowser
 from threading import Timer
 from flask import Flask, render_template
 from frontend.views import views
+from components.file_reader import bp_file_reader
 app = Flask(__name__)
 
-app.register_blueprint(views, url_prefix='/')
+app.register_blueprint(bp_file_reader)
 
 @app.route('/')
-def hello():
-    return 'Hello, World!'
+def home():
+     return render_template('home.html')
+
+@app.route('/upload')
+def upload():
+    return render_template('upload.html')
 
 @app.route('/plots')
 def plots():

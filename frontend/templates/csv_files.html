@@ -1,23 +1,108 @@
 <!-- templates/csv_files.html -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <!-- Head content... -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Additional custom styling -->
+    <style>
+        body {
+            background-color: #f7f7f7;
+            color: #333;
+            font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            padding-top: 40px;
+        }
+        .container {
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+            margin: auto;
+            max-width: 800px;
+            padding: 2rem;
+            margin-bottom: 40px;
+        }
+        h1 {
+            color: #007bff;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .message-box {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background-color: #e7f3ff;
+            border: 1px solid #ddd;
+            border-radius: 0.25rem;
+        }
+        .message-box-header {
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .collapse-content {
+            margin-top: 0.5rem;
+        }
+        .toggle-button {
+            margin-bottom: 0.75rem;
+            display: block;
+            width: 100%;
+            text-align: left;
+        }
+        .collapse ol {
+            padding-left: 1.5rem;
+            margin-top: 0;
+        }
+        .message-box p {
+            margin-bottom: 0.5rem;
+            font-size: 1.1em;
+            color: #333;
+        }
+        .message-box ol li {
+            margin-bottom: 0.25rem;
+        }
+    </style>
     <title>CSV Files Page</title>
 </head>
 <body>
-    <h1>CSV Files Processed</h1>
-    <!-- Include any content you want here, such as a table of processed data -->
-    {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            {% for message in messages %}
-                <div>{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
+    <div class="container">
+        <h1>CSV Files Processed</h1>
+        <!-- Display messages from the csv_identification function -->
+        {% for message in messages %}
+            {% if "The following feature extraction methods were identified:" in message %}
+                <!-- Display the toggle button -->
+                <div class="message-box">
+                    <div class="message-box-header" data-toggle="collapse" data-target="#featureExtraction{{ loop.index }}">
+                        View Extracted Features Methods
+                    </div>
+                    <div class="collapse collapse-content" id="featureExtraction{{ loop.index }}">
+                        <p>{{ message.split(':')[0] }}:</p>
+                        <ol>
+                            {% for method in message.split(':')[1].split(',') %}
+                                <li>{{ method.strip() }}</li>
+                            {% endfor %}
+                        </ol>
+                    </div>
+                </div>
+            {% else %}
+                <!-- For other messages, display them as-is -->
+                <div class="message-box">{{ message }}</div>
+            {% endif %}
+        {% endfor %}
+    </div>
 
-    <!-- Include the CSV component from the components folder -->
-    {% include 'components/csv.html' %}
+    <!-- Include Bootstrap’s JavaScript and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('.message-box-header').click(function() {
+                var collapseContent = $(this).next('.collapse');
+                collapseContent.on('show.bs.collapse', function () {
+                    $(this).prev().text('Unview');
+                });
+                collapseContent.on('hide.bs.collapse', function () {
+                    $(this).prev().text('View Extracted Features Methods');
+                });
+            });
+        });
+    </script>
 </body>
 </html>

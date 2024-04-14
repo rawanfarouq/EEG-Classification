@@ -14,9 +14,9 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 from sklearn.metrics import classification_report, accuracy_score
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler, LabelEncoder, LabelBinarizer
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
@@ -42,6 +42,11 @@ from mpl_toolkits.mplot3d import Axes3D
 from nilearn import plotting
 import plotly.graph_objects as go
 import cProfile
+from keras.models import Sequential
+from keras.optimizers import Adam
+from keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout, Conv2D, MaxPooling2D, BatchNormalization
+from keras.utils import to_categorical
+from scikeras.wrappers import KerasClassifier
 from collections import defaultdict
 
 
@@ -49,10 +54,11 @@ from collections import defaultdict
 
 
 downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-dataverse_files_folder = os.path.join(downloads_folder, "emotions")  # Combine with the folder name
+dataverse_files_folder = os.path.join(downloads_folder, "features")  # Combine with the folder name
 
 # Use glob to get a list of file paths matching a specific pattern
 file_paths = glob(os.path.join(dataverse_files_folder, '*.*'))  #Getting all files with any extension
+all_features = pd.DataFrame()
 
 
 def read_eeg_file(file_path):
@@ -598,24 +604,58 @@ def extract_features_as_df(raw):
     return features_df
 
 
-def process_processed_data(data, sfreq):
-    global all_features
-    print("The data appears to be processed and features are already extracted.")
+# def process_processed_data(data, sfreq):
+#     global all_features
+#     print("The data appears to be processed and features are already extracted.")
+#     if isinstance(data, pd.DataFrame):
+#         # If data is a DataFrame, pass it directly
+#         epochs_df = create_epochs_from_preprocessed_features(data, epoch_length=1.0, sfreq=500)
+#         print("Epochs DataFrame created with preprocessed features.")
+#         print(epochs_df.head()) 
+#         all_features = pd.concat([all_features, epochs_df], ignore_index=True)
+#     elif isinstance(data, mne.io.BaseRaw):
+#         # If data is a Raw object, convert it to a DataFrame first
+#         data_df = data.to_data_frame()
+#         epochs_df = create_epochs_from_preprocessed_features(data_df, epoch_length=1.0, sfreq=sfreq)
+#         print(epochs_df.head()) 
+#         all_features = pd.concat([all_features, epochs_df], ignore_index=True)
+#     else:
+#         raise ValueError("Data must be a pandas DataFrame or MNE Raw object.")
+
+def add_features_to_all_features(data):
+    # Check if the data is a pandas DataFrame or an MNE Raw object
     if isinstance(data, pd.DataFrame):
-        # If data is a DataFrame, pass it directly
-        epochs_df = create_epochs_from_preprocessed_features(data, epoch_length=1.0, sfreq=500)
-        print("Epochs DataFrame created with preprocessed features.")
-        print(epochs_df.head()) 
-        all_features = pd.concat([all_features, epochs_df], ignore_index=True)
+        # If data is already a DataFrame, use it directly
+        df = data
     elif isinstance(data, mne.io.BaseRaw):
-        # If data is a Raw object, convert it to a DataFrame first
-        data_df = data.to_data_frame()
-        epochs_df = create_epochs_from_preprocessed_features(data_df, epoch_length=1.0, sfreq=sfreq)
-        print(epochs_df.head()) 
-        all_features = pd.concat([all_features, epochs_df], ignore_index=True)
+        # If data is a Raw MNE object, convert to a DataFrame
+        df = data.to_data_frame()
     else:
         raise ValueError("Data must be a pandas DataFrame or MNE Raw object.")
     
+    # Here we assume that the DataFrame df contains features in its columns
+    # and that the last column is the label
+    return df
+
+def process_processed_data(data):
+    global all_features
+    print("The data appears to be processed and features are already extracted.")
+
+    # Add a print statement to check the type of data received
+    print(f"Type of data received: {type(data)}")  # This will show you the type of data
+    
+    try:
+        features_df = add_features_to_all_features(data)
+        print("Features have been added to the all_features DataFrame.")
+        
+        # Assuming all_features is defined globally and is a pd.DataFrame
+        all_features = pd.concat([all_features, features_df], ignore_index=True)
+        print(all_features.head())
+    except ValueError as e:
+        print(e)
+        # Here you can handle the case when data is not the correct type
+        # For example, you might want to log the error and stop processing
+
 
 # Custom transformer to handle EEG data reshaping
 class EEGToDataFrame(BaseEstimator, TransformerMixin):
@@ -741,12 +781,7 @@ def csv_identification(file_paths,processed_data_keywords):
                     message = f"The following feature extraction methods were identified: {', '.join(identified_methods)}"
                     messages.append(message)                    
                     # Identify calculation methods for each band of interest
-                    for band in ['theta', 'alpha', 'beta', 'gamma']:
-                        band_columns = [col for col in data_df.columns if band in col.lower()]
-                        for col in band_columns:
-                            method = identify_calculation_method(col, processed_data_keywords)
-                            message = f"The {band} band feature '{col}' is calculated using: {method}"
-                            messages.append(message)
+                    
 
                 else:
                     messages.append("There is no known extracted feature methods")  
@@ -756,19 +791,27 @@ def csv_identification(file_paths,processed_data_keywords):
                 if identified_methods:
                     message = f"The following feature extraction methods were identified: {', '.join(identified_methods)}"
                     messages.append(message)                    
-                    for band in ['theta', 'alpha', 'beta', 'gamma']:
-                        band_columns = [col for col in raw_data.columns if band in col.lower()]
-                        for col in band_columns:
-                            method = identify_calculation_method(col, processed_data_keywords)
-                            method = identify_calculation_method(col, processed_data_keywords)
-                            message = f"The {band} band feature '{col}' is calculated using: {method}"
-                            messages.append(message)
+                    
                 else:
                     messages.append("There is no known extracted feature methods")  
 
-        process_processed_data(raw_data, sfreq)   #CHECK IT PLEASE
+        process_processed_data(raw_data)   #CHECK IT PLEASE
     return messages,csv_only    
-                    
+
+ 
+def create_cnn_model(input_shape):
+    model = Sequential()
+    # Ensure kernel_size is less than or equal to the number of features
+    kernel_size = min(3, input_shape[0])
+    model.add(Conv1D(filters=64, kernel_size=kernel_size, activation='relu', input_shape=input_shape))
+    model.add(Conv1D(filters=64, kernel_size=kernel_size, activation='relu'))
+    #model.add(MaxPooling1D(pool_size=2))
+    model.add(Dropout(0.5))
+    model.add(Flatten())
+    model.add(Dense(100, activation='relu'))
+    model.add(Dense(1, activation='sigmoid'))  # Or 'softmax' for multi-class classification
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    return model
 
 
 def main():
@@ -800,6 +843,11 @@ def main():
     total_accuracy_dict_gbc = {}
     total_accuracy_dict_knn={}
     subject_session_counts = {}
+
+    accuracy_dict = defaultdict(lambda: defaultdict(list))
+    overall_accuracy_dict = defaultdict(dict)
+    subject_scores = defaultdict(lambda: defaultdict(list))
+
 
     for file_path in file_paths:
         
@@ -1035,101 +1083,154 @@ def main():
            
     else:        
     # This part should be outside (below) the for loop that goes through file_paths
+
+        # Loop over your subject_data to perform cross-validation for each subject
         for subject_identifier, data in subject_data.items():
-            label_encoder = LabelEncoder()
-            
-            X = data['features'].iloc[:, :-1]  # features: all columns except the last
-            y_binned = label_encoder.fit_transform(data['features'].iloc[:, -1])  # labels: the last column
+            X = data['features'].iloc[:, :-1]  # Features: all columns except the last
+            y = LabelEncoder().fit_transform(data['features'].iloc[:, -1])  # Labels: the last column
+            X_scaled = StandardScaler().fit_transform(X)  # Standardize features
 
-            # Perform a train-test split
-            X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2, random_state=42)
+           # Assuming X_scaled.shape is (n_samples, n_features)
+            n_samples, n_features = X_scaled.shape
 
-            # Standardize the features
-            scaler = StandardScaler()
-            X_train = scaler.fit_transform(X_train)
-            X_test = scaler.transform(X_test)
+            # Check if n_features is less than the desired kernel_size
+            if n_features < 3:
+                # Code to handle the situation, e.g., reducing kernel_size or feature engineering
+                # For example, reducing kernel_size:
+                kernel_size = n_features  # Set kernel size equal to the number of features
+            else:
+                kernel_size = 3  # Or any other value greater than or equal to n_features
 
-            # Fit the model (you can choose SVC, RandomForestClassifier, or GradientBoostingClassifier as shown in your code)
-            clf_rnd = RandomForestClassifier()
-            clf_rnd.fit(X_train, y_train)
+            # Reshape input data for the CNN
+            X_reshaped = X_scaled.reshape((n_samples, n_features, 1))
 
-            # Predict on the test data
-            y_pred_rnd = clf_rnd.predict(X_test)
-
-            # Calculate the accuracy
-            acc_rnd = accuracy_score(y_test, y_pred_rnd)
-            print(f"Accuracy RandomForest for subject {subject_identifier}: {acc_rnd * 100:.2f}%")
-            accuracy_dict_rnd[subject_identifier].append(acc_rnd)
-
-            # Fit the model (you can choose SVC, RandomForestClassifier, or GradientBoostingClassifier as shown in your code)
-            clf_SVC = SVC()
-            clf_SVC.fit(X_train, y_train)
-
-            # Predict on the test data
-            y_pred_SVC = clf_SVC.predict(X_test)
-
-            # Calculate the accuracy
-            acc_svc = accuracy_score(y_test, y_pred_SVC)
-            print(f"Accuracy SVC for subject {subject_identifier}: {acc_svc * 100:.2f}%")  
-            accuracy_dict_svc[subject_identifier].append(acc_svc)
-
-            clf_gbc = GradientBoostingClassifier()
-            clf_gbc.fit(X_train, y_train)
-
-            # Predict on the test data
-            y_pred_gbc = clf_gbc.predict(X_test)
-
-            # Calculate the accuracy
-            acc_gbc = accuracy_score(y_test, y_pred_gbc)
-            print(f"Accuracy Gradient for subject {subject_identifier}: {acc_gbc * 100:.2f}%")
-            accuracy_dict_gbc[subject_identifier].append(acc_gbc)
-
-            clf_knn = MLPClassifier(hidden_layer_sizes=(40,), max_iter=500, alpha=0.001,
-                    solver='sgd', random_state=21, tol=0.000000001)
-            clf_knn.fit(X_train, y_train)
-
-            # Predict on the test data
-            y_pred_knn = clf_knn.predict(X_test)
-
-            # Calculate the accuracy
-            acc_knn = accuracy_score(y_test, y_pred_knn)
-            print(f"Accuracy Gradient for subject {subject_identifier}: {acc_knn * 100:.2f}%")
-            accuracy_dict_knn[subject_identifier].append(acc_knn)  
-        
-        for subject_session in accuracy_dict_rnd:
-            
-            # Extract the subject identifier without the session
-            subject_identifier = subject_session.rsplit('_', 1)[0]
-            # Sum the accuracies for RandomForest
-            total_accuracy_dict_rnd[subject_identifier] = total_accuracy_dict_rnd.get(subject_identifier, 0) + sum(accuracy_dict_rnd[subject_session])
-            # Sum the accuracies for SVC
-            total_accuracy_dict_svc[subject_identifier] = total_accuracy_dict_svc.get(subject_identifier, 0) + sum(accuracy_dict_svc[subject_session])
-            # Sum the accuracies for GradientBoosting
-            total_accuracy_dict_gbc[subject_identifier] = total_accuracy_dict_gbc.get(subject_identifier, 0) + sum(accuracy_dict_gbc[subject_session])
-
-            total_accuracy_dict_knn[subject_identifier] = total_accuracy_dict_knn.get(subject_identifier, 0) + sum(accuracy_dict_knn[subject_session])
-
-            # Count the number of sessions for each subject
-            subject_session_counts[subject_identifier] = subject_session_counts.get(subject_identifier, 0) + len(accuracy_dict_rnd[subject_session])
-
-        # Now calculate the average accuracy for each classifier for each subject
-        average_accuracy_dict_rnd = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_rnd.items()}
-        average_accuracy_dict_svc = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_svc.items()}
-        average_accuracy_dict_gbc = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_gbc.items()}
-        average_accuracy_dict_knn = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_knn.items()}
-
-
-        # Print the average accuracy for each subject
-        for subject in average_accuracy_dict_rnd.keys():
-            print(f"Subject {subject} Accuracy RandomForest: {average_accuracy_dict_rnd[subject] * 100:.2f}%")
-            print(f"Subject {subject} Accuracy SVC: {average_accuracy_dict_svc[subject] * 100:.2f}%")
-            print(f"Subject {subject} Accuracy GradientBoosting: {average_accuracy_dict_gbc[subject] * 100:.2f}%")
-            print(f"Subject {subject} Accuracy Knn: {average_accuracy_dict_knn[subject] * 100:.2f}%")
-
-
+            # Now define the input shape for the CNN model
+            input_shape = (n_features, 1)  # Revised input shape
            
+            cnn_classifier = KerasClassifier(build_fn=create_cnn_model, input_shape=input_shape, epochs=10, batch_size=10, verbose=0)
+
+            # Define classifiers
+            classifiers = {
+                'RandomForest': RandomForestClassifier(),
+                'SVC': SVC(),
+                'GradientBoosting': GradientBoostingClassifier(),
+                'KNN':KNeighborsClassifier(n_neighbors=5) ,
+                'CNN': cnn_classifier
+            }
+
+            # Reshape the input data for CNN
+            X_reshaped = X_scaled.reshape((X_scaled.shape[0], X_scaled.shape[1], 1))
+
+            # Perform cross-validation and collect accuracy for each classifier
+            skf = StratifiedKFold(n_splits=5, shuffle=True)
+            for clf_name, clf in classifiers.items():
+                if clf_name=='CNN':
+                     cv_scores = cross_val_score(clf, X_reshaped, y, cv=skf)
+                else:
+                    cv_scores = cross_val_score(clf, X_scaled, y, cv=skf)     
+                
+                # Get the base subject identifier without session (e.g., "sub-001")
+                base_subject_identifier = subject_identifier.rsplit('_', 1)[0]
+                subject_scores[base_subject_identifier][clf_name].extend(cv_scores)
+
+        # Now calculate the overall accuracy for each subject by taking the mean of the aggregated scores
+        overall_accuracy_dict = defaultdict(dict)
+        for base_subject_identifier, clf_scores in subject_scores.items():
+            for clf_name, scores in clf_scores.items():
+                overall_accuracy = np.mean(scores)
+                overall_accuracy_dict[base_subject_identifier][clf_name] = overall_accuracy
+                print(f"Overall accuracy for {clf_name} on subject {base_subject_identifier}: {overall_accuracy * 100:.2f}%")
+
+        # for subject_identifier, data in subject_data.items():
+        #     label_encoder = LabelEncoder()
+            
+        #     X = data['features'].iloc[:, :-1]  # features: all columns except the last
+        #     y_binned = label_encoder.fit_transform(data['features'].iloc[:, -1])  # labels: the last column
+
+        #     # Perform a train-test split
+        #     X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
+
+        #     # Standardize the features
+        #     scaler = StandardScaler()
+        #     X_train = scaler.fit_transform(X_train)
+        #     X_test = scaler.transform(X_test)
+
+        #     # Fit the model (you can choose SVC, RandomForestClassifier, or GradientBoostingClassifier as shown in your code)
+        #     clf_rnd = RandomForestClassifier()
+        #     clf_rnd.fit(X_train, y_train)
+
+        #     # Predict on the test data
+        #     y_pred_rnd = clf_rnd.predict(X_test)
+
+        #     # Calculate the accuracy
+        #     acc_rnd = accuracy_score(y_test, y_pred_rnd)
+        #     print(f"Accuracy RandomForest for subject {subject_identifier}: {acc_rnd * 100:.2f}%")
+        #     accuracy_dict_rnd[subject_identifier].append(acc_rnd)
+
+        #     # Fit the model (you can choose SVC, RandomForestClassifier, or GradientBoostingClassifier as shown in your code)
+        #     clf_SVC = SVC()
+        #     clf_SVC.fit(X_train, y_train)
+
+        #     # Predict on the test data
+        #     y_pred_SVC = clf_SVC.predict(X_test)
+
+        #     # Calculate the accuracy
+        #     acc_svc = accuracy_score(y_test, y_pred_SVC)
+        #     print(f"Accuracy SVC for subject {subject_identifier}: {acc_svc * 100:.2f}%")  
+        #     accuracy_dict_svc[subject_identifier].append(acc_svc)
+
+        #     clf_gbc = GradientBoostingClassifier()
+        #     clf_gbc.fit(X_train, y_train)
+
+        #     # Predict on the test data
+        #     y_pred_gbc = clf_gbc.predict(X_test)
+
+        #     # Calculate the accuracy
+        #     acc_gbc = accuracy_score(y_test, y_pred_gbc)
+        #     print(f"Accuracy Gradient for subject {subject_identifier}: {acc_gbc * 100:.2f}%")
+        #     accuracy_dict_gbc[subject_identifier].append(acc_gbc)
+
+        #     clf_knn = MLPClassifier(hidden_layer_sizes=(40,), max_iter=500, alpha=0.001,
+        #             solver='sgd', tol=0.000000001)
+        #     clf_knn.fit(X_train, y_train)
+
+        #     # Predict on the test data
+        #     y_pred_knn = clf_knn.predict(X_test)
+
+        #     # Calculate the accuracy
+        #     acc_knn = accuracy_score(y_test, y_pred_knn)
+        #     print(f"Accuracy Gradient for subject {subject_identifier}: {acc_knn * 100:.2f}%")
+        #     accuracy_dict_knn[subject_identifier].append(acc_knn)  
+        
+        # for subject_session in accuracy_dict_rnd:
+            
+        #     # Extract the subject identifier without the session
+        #     subject_identifier = subject_session.rsplit('_', 1)[0]
+        #     # Sum the accuracies for RandomForest
+        #     total_accuracy_dict_rnd[subject_identifier] = total_accuracy_dict_rnd.get(subject_identifier, 0) + sum(accuracy_dict_rnd[subject_session])
+        #     # Sum the accuracies for SVC
+        #     total_accuracy_dict_svc[subject_identifier] = total_accuracy_dict_svc.get(subject_identifier, 0) + sum(accuracy_dict_svc[subject_session])
+        #     # Sum the accuracies for GradientBoosting
+        #     total_accuracy_dict_gbc[subject_identifier] = total_accuracy_dict_gbc.get(subject_identifier, 0) + sum(accuracy_dict_gbc[subject_session])
+
+        #     total_accuracy_dict_knn[subject_identifier] = total_accuracy_dict_knn.get(subject_identifier, 0) + sum(accuracy_dict_knn[subject_session])
+
+        #     # Count the number of sessions for each subject
+        #     subject_session_counts[subject_identifier] = subject_session_counts.get(subject_identifier, 0) + len(accuracy_dict_rnd[subject_session])
+
+        # # Now calculate the average accuracy for each classifier for each subject
+        # average_accuracy_dict_rnd = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_rnd.items()}
+        # average_accuracy_dict_svc = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_svc.items()}
+        # average_accuracy_dict_gbc = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_gbc.items()}
+        # average_accuracy_dict_knn = {subject: total_accuracy / subject_session_counts[subject] for subject, total_accuracy in total_accuracy_dict_knn.items()}
 
 
+        # # Print the average accuracy for each subject
+        # for subject in average_accuracy_dict_rnd.keys():
+        #     print(f"Subject {subject} Accuracy RandomForest: {average_accuracy_dict_rnd[subject] * 100:.2f}%")
+        #     print(f"Subject {subject} Accuracy SVC: {average_accuracy_dict_svc[subject] * 100:.2f}%")
+        #     print(f"Subject {subject} Accuracy GradientBoosting: {average_accuracy_dict_gbc[subject] * 100:.2f}%")
+        #     print(f"Subject {subject} Accuracy Knn: {average_accuracy_dict_knn[subject] * 100:.2f}%")
 
 
     # if process_with_builtin_functions and :
@@ -1150,6 +1251,21 @@ def main():
         y_binned = label_encoder.fit_transform(all_features.iloc[:, -1])  # labels: the last column
 
 
+        # clf_svc = SVC()
+        # scores_svc = cross_val_score(clf_svc, X, y_binned, cv=5)  # cv=5 for 5-fold cross-validation
+        # print("SVM cross-validation accuracy:", np.mean(scores_svc))
+
+        # # For Random Forest
+        # clf_rf = RandomForestClassifier(n_estimators=50, random_state=42)
+        # scores_rf = cross_val_score(clf_rf, X, y_binned, cv=5)
+        # print("Random Forest cross-validation accuracy:", np.mean(scores_rf))
+
+        # # For Gradient Boosting
+        # clf_gbc = GradientBoostingClassifier(n_estimators=50, random_state=42)
+        # scores_gbc = cross_val_score(clf_gbc, X, y_binned, cv=5)
+        # print("Gradient Boosting cross-validation accuracy:", np.mean(scores_gbc))
+
+
         print("Y binned:", y_binned)
         print("Last column: ",all_features.iloc[:, -1])
 
@@ -1160,7 +1276,7 @@ def main():
         print("Y unique:",np.unique(y_binned))  # To see the unique values
 
         # Perform a train-test split
-        X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2, random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
 
         # Standardize the features
         scaler = StandardScaler()
@@ -1170,11 +1286,12 @@ def main():
         clf = SVC()
         clf.fit(X_train, y_train)
         y_pred_svc = clf.predict(X_test)
-        acc_svc = round(clf.score(X_train, y_train) * 100, 2)
-        print("SVM Accuracy is:",(str(acc_svc)+'%'))
+        acc_svc = round(accuracy_score(y_test,y_pred_svc)*100,2)
+        
+        
 
         # Initialize the classifier
-        clf_rf = RandomForestClassifier(n_estimators=50, random_state=42)
+        clf_rf = RandomForestClassifier(n_estimators=50)
 
         # Fit the classifier to the training data
         clf_rf.fit(X_train, y_train)
@@ -1183,10 +1300,10 @@ def main():
         y_pred_rf = clf_rf.predict(X_test)
 
         # Calculate the accuracy
-        acc_rf = round(clf_rf.score(X_train, y_train) * 100, 2)
-        print("Random Forest accuracy is:", (str(acc_rf) + '%'))
+        acc_rf = round(accuracy_score(y_test,y_pred_rf)*100,2)
+        
 
-        clf_gbc = GradientBoostingClassifier(n_estimators=50, random_state=42)
+        clf_gbc = GradientBoostingClassifier(n_estimators=50)
 
         # Fit the classifier to the training data
         clf_gbc.fit(X_train, y_train)
@@ -1195,8 +1312,55 @@ def main():
         y_pred_gbc = clf_gbc.predict(X_test)
 
         # Calculate the accuracy on the training set
-        acc_gbc = round(clf_gbc.score(X_train, y_train) * 100, 2)
-        print("Gradient Boosting Classifier accuracy is:", (str(acc_gbc) + '%'))   
+        acc_gbc = round(accuracy_score(y_test,y_pred_gbc)*100,2)
+
+        clf_knn = KNeighborsClassifier(n_neighbors=5)  # You can tune the n_neighbors parameter.
+
+        # Fit the classifier to the training data
+        clf_knn.fit(X_train, y_train)
+
+        # Predict on the test data
+        y_pred_knn = clf_knn.predict(X_test)
+
+        # Calculate the accuracy
+        acc_knn = round(accuracy_score(y_test, y_pred_knn) * 100, 2)
+         
+
+        # Reshape data for 1D CNN input (batch_size, steps, input_dimension)
+        X_train_cnn = np.expand_dims(X_train, axis=2)
+        X_test_cnn = np.expand_dims(X_test, axis=2)
+
+        # Convert labels to categorical (one-hot encoding)
+        y_train_categorical = to_categorical(y_train)
+        y_test_categorical = to_categorical(y_test)
+
+        # Define the 1D CNN model
+        model = Sequential()
+        model.add(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(X_train_cnn.shape[1], 1)))
+        model.add(Conv1D(filters=64, kernel_size=3, activation='relu'))
+        model.add(Dropout(0.5))
+        model.add(MaxPooling1D(pool_size=2))
+        model.add(Flatten())
+        model.add(Dense(100, activation='relu'))
+        model.add(Dense(y_train_categorical.shape[1], activation='softmax'))
+
+        # Compile the model
+        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+        # Fit the model
+        model.fit(X_train_cnn, y_train_categorical, epochs=10, batch_size=32, verbose=1)
+
+        # Evaluate the model
+        _, accuracy = model.evaluate(X_test_cnn, y_test_categorical, verbose=0)
+
+        print("SVM Accuracy is:",(str(acc_svc)+'%'))
+        print("Random Forest accuracy is:", (str(acc_rf) + '%'))
+        print("Gradient Boosting Classifier accuracy is:", (str(acc_gbc) + '%')) 
+        print("KNN Accuracy is:", (str(acc_knn) + '%'))
+        print(f'CNN 1D - Accuracy: {accuracy * 100:.2f}%')
+
+
+        
 
         # print("Classes distribution in training set:", np.unique(y_train, return_counts=True))
         # print("Classes distribution in testing set:", np.unique(y_test, return_counts=True))

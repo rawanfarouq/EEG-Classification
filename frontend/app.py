@@ -1,11 +1,12 @@
 import webbrowser
 from threading import Timer
-from flask import Flask, render_template
+from flask import Flask, render_template, session,flash
 from frontend.views import views
 from components.file_reader import bp_file_reader
 app = Flask(__name__)
 
 app.register_blueprint(bp_file_reader)
+app.secret_key = 'csv_messages'
 
 @app.route('/')
 def home():
@@ -29,7 +30,9 @@ def results():
 
 @app.route('/csv')
 def csv_files():
-     return render_template('csv_files.html')
+    # Retrieve messages from session
+    messages = session.get('csv_messages', [])
+    return render_template('csv_files.html', messages=messages)
 
 def open_browser():
       webbrowser.open_new('http://127.0.0.1:5000/')

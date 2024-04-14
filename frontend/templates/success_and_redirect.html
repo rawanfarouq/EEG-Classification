@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+    <meta http-equiv="refresh" content="5;url={{ redirect_url }}" />
+    <title>Redirecting...</title>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="alert alert-success" role="alert">
+            {{ message }}
+        </div>
+        <script type="text/javascript">
+            // Redirect after 5 seconds
+            setTimeout(function() {
+                window.location.href = "{{ redirect_url }}";
+            }, 500);
+        </script>
+    </div>
+</body>
+</html>

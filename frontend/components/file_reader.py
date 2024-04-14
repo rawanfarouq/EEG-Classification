@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, flash,redirect,url_for
+from flask import Blueprint, render_template, request, jsonify, flash,redirect,url_for, session
 from werkzeug.utils import secure_filename
 import sys
 import os
@@ -12,11 +12,12 @@ print("Backend directory:", backend_dir)
 # Add the backend directory to the sys.path
 sys.path.insert(0, backend_dir)
 
-from backend.classification import read_eeg_file, read_edf_eeg, read_mat_eeg
+from backend.classification import read_eeg_file, read_edf_eeg, read_mat_eeg, csv_identification,processed_data_keywords
 from backend.features import files
 
 @bp_file_reader.route('/upload', methods=['GET', 'POST'])
 def upload():
+
     if request.method == "POST":
         files = request.files.getlist('file_path')
         
@@ -67,13 +68,20 @@ def upload():
 
 
         if all_files_processed_successfully:
-            # All files were processed successfully
-           return render_template('alert.html', message="All files successfully read", alert_type='success')
 
-        else:
-            # Not all files were processed, return an appropriate message
-            return render_template('alert.html', message="Some files were not processed successfully", alert_type='warning')
-
+            file_paths = [os.path.join(downloads_folder, secure_filename(file.filename)) for file in files if allowed_file(file.filename)]
+        # Check if any of the uploaded files are CSV
+            csv_uploaded = any(file.filename.lower().endswith('csv') for file in files)
+        
+            if csv_uploaded:
+                messages, csv_only = csv_identification(file_paths, processed_data_keywords)
+                # Store messages in session
+                session['csv_messages'] = messages
+                # Redirect to the csv_files page
+                return render_template('success_and_redirect.html', message="All files successfully read", redirect_url=url_for('csv_files'))
+            else:
+                # If no CSV files were uploaded, render the success alert as normal
+                return render_template('alert.html', message="All files successfully read", alert_type='success')
     else:
         return render_template("upload.html")
 

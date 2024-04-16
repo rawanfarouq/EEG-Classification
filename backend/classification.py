@@ -19,10 +19,11 @@ from sklearn.metrics import classification_report, accuracy_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder, LabelBinarizer
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.decomposition import PCA
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.base import BaseEstimator,TransformerMixin
 from sklearn.impute import SimpleImputer
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from sklearn.utils import parallel_backend
 from tsfresh import select_features
 from tsfresh.feature_extraction import ComprehensiveFCParameters,extract_features,MinimalFCParameters
 from tsfresh.utilities.dataframe_functions import impute
@@ -48,17 +49,26 @@ from keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout, Conv2D, 
 from keras.utils import to_categorical
 from scikeras.wrappers import KerasClassifier
 from collections import defaultdict
-
-
-
+from time import sleep
+from joblib import Parallel,delayed
+import tensorflow as tf
+from flask import session
 
 
 downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-dataverse_files_folder = os.path.join(downloads_folder, "features")  # Combine with the folder name
+dataverse_files_folder = os.path.join(downloads_folder, "mat2")  # Combine with the folder name
 
 # Use glob to get a list of file paths matching a specific pattern
 file_paths = glob(os.path.join(dataverse_files_folder, '*.*'))  #Getting all files with any extension
 all_features = pd.DataFrame()
+labels_list=[]
+label_encoder = LabelEncoder()
+progress_updates=[]
+preprocessing_steps=set()
+all_bads = set()
+subject_identifier=""
+
+
 
 
 def read_eeg_file(file_path):
@@ -76,6 +86,16 @@ def read_eeg_file(file_path):
 
         # unique_prefixes = get_unique_prefixes(df.columns)
         # print("Unique prefixes:", unique_prefixes)
+
+        for col in df.columns:
+            if col.lower() in ['label', 'labels']:
+                continue  # Skip the label columns
+            if df[col].apply(lambda x: not pd.api.types.is_number(x)).any():
+                print(f"Column '{col}' contains non-numeric values and will be removed.")
+                df.drop(col, axis=1, inplace=True)
+                
+        print(df.head()) 
+        
 
         if check_processed_from_columns(df, processed_data_keywords):
             print("The data appears to be processed.")
@@ -173,7 +193,7 @@ def read_mat_eeg(file_path):
         ch_types = ['eeg'] * n_channels
 
         # Define the sampling frequency
-        sfreq = 500  # Replace with the actual sampling frequency if available
+        sfreq = 250  # Replace with the actual sampling frequency if available
 
         # Create MNE info structure
         info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types=ch_types)
@@ -257,69 +277,74 @@ def visualize_3d_brain_model(raw):
 
     return fig
 
+def add_preprocessing_step(step_description):
+    preprocessing_steps.add(step_description)
 
+    
 
 def preprocess_channel_data(channel_data, sfreq, l_freq_hp, h_freq_lp):
-    # High-pass filtering to remove slow drifts
     channel_data = filter_data(channel_data, sfreq, l_freq=l_freq_hp, h_freq=h_freq_lp, verbose=False)
-    
-    # Low-pass filtering to remove high-frequency noise
-    #channel_data = filter_data(channel_data, sfreq, l_freq=None, h_freq=h_freq_lp, verbose=False)
-    
-    # Notch filter to remove power line noise at 50 Hz or 60 Hz and its harmonics
-    # for notch_freq in notch_freqs:
-    #     channel_data = filter_data(channel_data, sfreq, l_freq=notch_freq - 0.1, h_freq=notch_freq + 0.1, method='iir', verbose=False)
-    
+    add_preprocessing_step(f"High-pass filtered at {l_freq_hp}Hz and low-pass filtered at {h_freq_lp}Hz with sample frequency {sfreq}Hz.")
     return channel_data
 
 
 
-def preprocess_raw_eeg(raw, sfreq):
+def preprocess_raw_eeg(raw, sfreq,session):
 
-     # Get the data from the Raw object
-    eeg_data = raw.get_data()
-
-    preprocessed_data = np.empty(eeg_data.shape)
+    channel_mapping = {'EEG 0': 'Fp1','EEG 1': 'Fp2','EEG 2': 'F7','EEG 3': 'F3',
+                     'EEG 4': 'Fz','EEG 5': 'F4', 'EEG 6': 'F8', 'EEG 7': 'FC5','EEG 8': 'FC1',
+                    'EEG 9': 'FC2','EEG 10': 'FC6', 'EEG 11': 'T3',
+                    'EEG 12': 'C3','EEG 13': 'Cz', 'EEG 14': 'C4', 'EEG 15': 'T4',
+                    'EEG 16': 'CP5', 'EEG 17': 'CP1','EEG 18': 'CP2','EEG 19': 'CP6','EEG 20': 'T5',
+                    'EEG 21': 'P3','EEG 22': 'Pz','EEG 23': 'P4','EEG 24': 'T6',
+                    'EEG 25': 'PO3','EEG 26': 'PO4', 'EEG 27': 'O1', 'EEG 28': 'Oz',
+                         'EEG 29': 'O2','EEG 30': 'A1',   'EEG 31': 'A2', }
+    
+    raw.rename_channels(channel_mapping)
+    montage = mne.channels.make_standard_montage('standard_1020')
+    raw.set_montage(montage)
     
 
-    # Notch filter to remove power line noise at 50 Hz or 60 Hz and its harmonics
-    #notch_freqs = np.arange(50, sfreq / 2, 50)  # Assuming 50 Hz power line noise
+    # Run ICA to remove artifacts.
+    ica = ICA(n_components=10, random_state=97, max_iter=800)
+    ica.fit(raw)
+    raw = ica.apply(raw)
+    add_preprocessing_step("Applied ICA for artifact removal.")
 
-    # Instantiate NoisyChannels with the filtered raw data
+    # Instantiate NoisyChannels with the filtered raw data.
     noisy_detector = NoisyChannels(raw)
 
-    # Now you can use the instance methods to find bad channels
+    # Adjust the thresholds for finding bad channels if necessary.
     noisy_detector.find_bad_by_correlation()
     noisy_detector.find_bad_by_deviation()
 
-    # Combine all the bad channels
+    # Combine all the bad channels.
     bads = noisy_detector.get_bads()
 
-    # Mark bad channels in the info structure
+    # Mark bad channels in the info structure.
     raw.info['bads'] = bads
 
-    # Interpolate bad channels using good ones
+    # Interpolate bad channels using good ones.
     if bads:
         raw.drop_channels(bads)
+        add_preprocessing_step(f"Interpolated bad channels for {session}: {bads}")
 
 
-     # Independent Component Analysis (ICA) to remove artifacts
-    ica = ICA(n_components=10, random_state=97, max_iter=800)
-    ica.fit(raw)
-    # Apply ICA to the raw data to remove the bad components
-    raw = ica.apply(raw)
+    # Extract the data for further processing if needed.
+    eeg_data = raw.get_data()
+    preprocessed_data = np.empty(eeg_data.shape)
 
     for i, channel in enumerate(eeg_data):
-        preprocessed_data[i] = preprocess_channel_data(channel, sfreq, l_freq_hp=0.5, h_freq_lp=45.0)
-    
-    # Create an MNE RawArray object with the preprocessed data
-    ch_names = ['EEG %03d' % i for i in range(preprocessed_data.shape[0])]  # Create channel names
-    ch_types = ['eeg'] * preprocessed_data.shape[0]
-    info = create_info(ch_names=ch_names, sfreq=sfreq, ch_types=ch_types)
+        preprocessed_data[i] = preprocess_channel_data(channel, sfreq, l_freq_hp=0.5, h_freq_lp=60.0)
+
+    # Create an MNE RawArray object with the preprocessed data.
+    ch_names = raw.info['ch_names']
+    info = create_info(ch_names=ch_names, sfreq=sfreq, ch_types='eeg')
     preprocessed_raw = RawArray(preprocessed_data, info)
+    
 
-    return preprocessed_raw 
 
+    return preprocessed_raw, list(preprocessing_steps)
 
 def extract_features_from_channel(channel_data, sfreq, epoch_length=1.0):
     # Assuming channel_data is a 1D numpy array
@@ -814,6 +839,176 @@ def create_cnn_model(input_shape):
     return model
 
 
+def csv_modeling():
+        
+        progress_updates.append(10)
+        session['progress'] = 10
+        sleep(0.1)
+
+        print("Length of all_features: ", len(all_features))
+        print("Length of labels_list: ", len(labels_list))   
+        
+        X = all_features.iloc[:, :-1]  # features: all columns except the last
+        y_binned = label_encoder.fit_transform(all_features.iloc[:, -1])  # labels: the last column
+
+
+        # clf_svc = SVC()
+        # scores_svc = cross_val_score(clf_svc, X, y_binned, cv=5)  # cv=5 for 5-fold cross-validation
+        # print("SVM cross-validation accuracy:", np.mean(scores_svc))
+
+        # # For Random Forest
+        # clf_rf = RandomForestClassifier(n_estimators=50, random_state=42)
+        # scores_rf = cross_val_score(clf_rf, X, y_binned, cv=5)
+        # print("Random Forest cross-validation accuracy:", np.mean(scores_rf))
+
+        # # For Gradient Boosting
+        # clf_gbc = GradientBoostingClassifier(n_estimators=50, random_state=42)
+        # scores_gbc = cross_val_score(clf_gbc, X, y_binned, cv=5)
+        # print("Gradient Boosting cross-validation accuracy:", np.mean(scores_gbc))
+
+
+        print("Y binned:", y_binned)
+        print("Last column: ",all_features.iloc[:, -1])
+
+        threshold = np.percentile(y_binned, 50)  # This is essentially the same as the median
+        y = pd.cut(y_binned, bins=[-np.inf, threshold, np.inf], labels=[0, 1])
+
+
+        print("Y head:",y_binned[:5])  # To see the first few entries
+        print("Y unique:",np.unique(y_binned))  # To see the unique values
+
+       
+
+        # Perform a train-test split
+        X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
+
+        # Standardize the features
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_test= scaler.transform(X_test)
+
+        clf = SVC()
+        progress_updates.append(20)
+        sleep(0.1)
+        session['progress'] = 20
+
+        clf.fit(X_train, y_train)
+        y_pred_svc = clf.predict(X_test)
+        acc_svc = round(accuracy_score(y_test,y_pred_svc)*100,2)
+        
+
+        # Initialize the classifier
+        clf_rf = RandomForestClassifier(n_estimators=50)
+        progress_updates.append(40)
+        sleep(0.1)
+        session['progress'] = 40
+
+        # Fit the classifier to the training data
+        clf_rf.fit(X_train, y_train)
+
+        # Predict on the test data
+        y_pred_rf = clf_rf.predict(X_test)
+
+        # Calculate the accuracy
+        acc_rf = round(accuracy_score(y_test,y_pred_rf)*100,2)
+
+        # clf_gbc = GradientBoostingClassifier(n_estimators=50)
+        # progress_updates.append(60)
+        # sleep(0.1)
+
+        # # Fit the classifier to the training data
+        # clf_gbc.fit(X_train, y_train)
+
+        # # Predict on the test data
+        # y_pred_gbc = clf_gbc.predict(X_test)
+
+        # # Calculate the accuracy on the training set
+        # acc_gbc = round(accuracy_score(y_test,y_pred_gbc)*100,2)
+
+        clf_lr = LogisticRegression()
+        progress_updates.append(60)
+        sleep(0.1)
+        session['progress'] = 60
+
+        # Fit the classifier to the training data
+        clf_lr.fit(X_train, y_train)
+
+        # Predict on the test data
+        y_pred_lr = clf_lr.predict(X_test)
+
+        # Calculate the accuracy
+        acc_lr = round(accuracy_score(y_test, y_pred_lr) * 100, 2)
+
+        clf_knn = KNeighborsClassifier(n_neighbors=5)  # You can tune the n_neighbors parameter.
+        progress_updates.append(80)
+        sleep(0.1) 
+        session['progress'] = 80
+
+        # Fit the classifier to the training data
+        clf_knn.fit(X_train, y_train)
+
+        # Predict on the test data
+        y_pred_knn = clf_knn.predict(X_test)
+
+        # Calculate the accuracy
+        acc_knn = round(accuracy_score(y_test, y_pred_knn) * 100, 2)
+
+        
+
+        # Reshape data for 1D CNN input (batch_size, steps, input_dimension)
+        X_train_cnn = np.expand_dims(X_train, axis=2)
+        X_test_cnn = np.expand_dims(X_test, axis=2)
+
+        # Convert labels to categorical (one-hot encoding)
+        y_train_categorical = to_categorical(y_train)
+        y_test_categorical = to_categorical(y_test)
+
+        # Define the 1D CNN model
+        model = Sequential()
+        model.add(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(X_train_cnn.shape[1], 1)))
+        model.add(Conv1D(filters=64, kernel_size=3, activation='relu'))
+        model.add(Dropout(0.5))
+        model.add(MaxPooling1D(pool_size=2))
+        model.add(Flatten())
+        model.add(Dense(100, activation='relu'))
+        model.add(Dense(y_train_categorical.shape[1], activation='softmax'))
+
+        # Compile the model
+        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+        # Fit the model
+        model.fit(X_train_cnn, y_train_categorical, epochs=5, batch_size=32, verbose=1)
+
+        # Evaluate the model
+        _, accuracy = model.evaluate(X_test_cnn, y_test_categorical, verbose=0)
+
+        progress_updates.append(100)
+        sleep(0.1)
+        session['progress'] = 100
+
+
+        print("SVM Accuracy is:",(str(acc_svc)+'%'))
+        print("Random Forest accuracy is:", (str(acc_rf) + '%'))
+        print("Logistic Regression Classifier accuracy is:", (str(acc_lr) + '%')) 
+        print("KNN Accuracy is:", (str(acc_knn) + '%'))
+        print(f'CNN 1D - Accuracy: {accuracy * 100:.2f}%')
+
+        accuracies = {
+        'SVM': acc_svc,
+        'Random_Forest': acc_rf,
+        'Logistic Regression': acc_lr,
+        'KNN': acc_knn,
+        'CNN': accuracy * 100  # Assuming 'accuracy' is the accuracy of the CNN model
+    }
+        return accuracies,progress_updates
+
+        # print("Classes distribution in training set:", np.unique(y_train, return_counts=True))
+        # print("Classes distribution in testing set:", np.unique(y_test, return_counts=True))
+
+        # print("Unique classes in y_train:", np.unique(y_train))
+        # print("Unique classes in y_test:", np.unique(y_test))  
+
+
 def main():
 
     global all_features
@@ -847,6 +1042,8 @@ def main():
     accuracy_dict = defaultdict(lambda: defaultdict(list))
     overall_accuracy_dict = defaultdict(dict)
     subject_scores = defaultdict(lambda: defaultdict(list))
+
+    session_count=0
 
 
     for file_path in file_paths:
@@ -1028,7 +1225,11 @@ def main():
             else:
                 raw_data, sfreq, labels = read_mat_eeg(file_path) # Handling .mat file 
                  #fig = visualize_3d_brain_model(raw_data)
-                preprocessed_raw = preprocess_raw_eeg(raw_data, 250)
+                preprocessed_raw ,preprocessing_steps= preprocess_raw_eeg(raw_data, 250,subject_identifier)
+
+                for step in preprocessing_steps:
+                    print(step)
+
 
                 #features_df = extract_features_mat(preprocessed_raw, sfreq, labels,epoch_length=1.0)
                 features_df = extract_features_csp(preprocessed_raw, sfreq, labels, epoch_length=1.0)
@@ -1113,7 +1314,7 @@ def main():
             classifiers = {
                 'RandomForest': RandomForestClassifier(),
                 'SVC': SVC(),
-                'GradientBoosting': GradientBoostingClassifier(),
+                'Logistic Regression': LogisticRegression(),
                 'KNN':KNeighborsClassifier(n_neighbors=5) ,
                 'CNN': cnn_classifier
             }
@@ -1242,132 +1443,7 @@ def main():
 
     # else:
     if csv_only | edf_only:        
-        label_encoder = LabelEncoder()
-           
-        print("Length of all_features: ", len(all_features))
-        print("Length of labels_list: ", len(labels_list))   
-        
-        X = all_features.iloc[:, :-1]  # features: all columns except the last
-        y_binned = label_encoder.fit_transform(all_features.iloc[:, -1])  # labels: the last column
-
-
-        # clf_svc = SVC()
-        # scores_svc = cross_val_score(clf_svc, X, y_binned, cv=5)  # cv=5 for 5-fold cross-validation
-        # print("SVM cross-validation accuracy:", np.mean(scores_svc))
-
-        # # For Random Forest
-        # clf_rf = RandomForestClassifier(n_estimators=50, random_state=42)
-        # scores_rf = cross_val_score(clf_rf, X, y_binned, cv=5)
-        # print("Random Forest cross-validation accuracy:", np.mean(scores_rf))
-
-        # # For Gradient Boosting
-        # clf_gbc = GradientBoostingClassifier(n_estimators=50, random_state=42)
-        # scores_gbc = cross_val_score(clf_gbc, X, y_binned, cv=5)
-        # print("Gradient Boosting cross-validation accuracy:", np.mean(scores_gbc))
-
-
-        print("Y binned:", y_binned)
-        print("Last column: ",all_features.iloc[:, -1])
-
-        threshold = np.percentile(y_binned, 50)  # This is essentially the same as the median
-        y = pd.cut(y_binned, bins=[-np.inf, threshold, np.inf], labels=[0, 1])
-
-        print("Y head:",y_binned[:5])  # To see the first few entries
-        print("Y unique:",np.unique(y_binned))  # To see the unique values
-
-        # Perform a train-test split
-        X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
-
-        # Standardize the features
-        scaler = StandardScaler()
-        X_train = scaler.fit_transform(X_train)
-        X_test= scaler.transform(X_test)
-
-        clf = SVC()
-        clf.fit(X_train, y_train)
-        y_pred_svc = clf.predict(X_test)
-        acc_svc = round(accuracy_score(y_test,y_pred_svc)*100,2)
-        
-        
-
-        # Initialize the classifier
-        clf_rf = RandomForestClassifier(n_estimators=50)
-
-        # Fit the classifier to the training data
-        clf_rf.fit(X_train, y_train)
-
-        # Predict on the test data
-        y_pred_rf = clf_rf.predict(X_test)
-
-        # Calculate the accuracy
-        acc_rf = round(accuracy_score(y_test,y_pred_rf)*100,2)
-        
-
-        clf_gbc = GradientBoostingClassifier(n_estimators=50)
-
-        # Fit the classifier to the training data
-        clf_gbc.fit(X_train, y_train)
-
-        # Predict on the test data
-        y_pred_gbc = clf_gbc.predict(X_test)
-
-        # Calculate the accuracy on the training set
-        acc_gbc = round(accuracy_score(y_test,y_pred_gbc)*100,2)
-
-        clf_knn = KNeighborsClassifier(n_neighbors=5)  # You can tune the n_neighbors parameter.
-
-        # Fit the classifier to the training data
-        clf_knn.fit(X_train, y_train)
-
-        # Predict on the test data
-        y_pred_knn = clf_knn.predict(X_test)
-
-        # Calculate the accuracy
-        acc_knn = round(accuracy_score(y_test, y_pred_knn) * 100, 2)
-         
-
-        # Reshape data for 1D CNN input (batch_size, steps, input_dimension)
-        X_train_cnn = np.expand_dims(X_train, axis=2)
-        X_test_cnn = np.expand_dims(X_test, axis=2)
-
-        # Convert labels to categorical (one-hot encoding)
-        y_train_categorical = to_categorical(y_train)
-        y_test_categorical = to_categorical(y_test)
-
-        # Define the 1D CNN model
-        model = Sequential()
-        model.add(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(X_train_cnn.shape[1], 1)))
-        model.add(Conv1D(filters=64, kernel_size=3, activation='relu'))
-        model.add(Dropout(0.5))
-        model.add(MaxPooling1D(pool_size=2))
-        model.add(Flatten())
-        model.add(Dense(100, activation='relu'))
-        model.add(Dense(y_train_categorical.shape[1], activation='softmax'))
-
-        # Compile the model
-        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-
-        # Fit the model
-        model.fit(X_train_cnn, y_train_categorical, epochs=10, batch_size=32, verbose=1)
-
-        # Evaluate the model
-        _, accuracy = model.evaluate(X_test_cnn, y_test_categorical, verbose=0)
-
-        print("SVM Accuracy is:",(str(acc_svc)+'%'))
-        print("Random Forest accuracy is:", (str(acc_rf) + '%'))
-        print("Gradient Boosting Classifier accuracy is:", (str(acc_gbc) + '%')) 
-        print("KNN Accuracy is:", (str(acc_knn) + '%'))
-        print(f'CNN 1D - Accuracy: {accuracy * 100:.2f}%')
-
-
-        
-
-        # print("Classes distribution in training set:", np.unique(y_train, return_counts=True))
-        # print("Classes distribution in testing set:", np.unique(y_test, return_counts=True))
-
-        # print("Unique classes in y_train:", np.unique(y_train))
-        # print("Unique classes in y_test:", np.unique(y_test))  
-
+       csv_modeling()
 
    
 

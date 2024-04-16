@@ -34,9 +34,17 @@ def csv_files():
     messages = session.get('csv_messages', [])
     return render_template('csv_files.html', messages=messages)
 
-def open_browser():
-      webbrowser.open_new('http://127.0.0.1:5000/')
+
+@app.route('/mat_classification')   
+def mat_classification():
+     
+    return render_template('mat_files_class.html')
+
+
+
+# def open_browser():
+#       webbrowser.open_new('http://127.0.0.1:5000/')
 
 if __name__ == '__main__':
-    Timer(1, open_browser).start()  # Wait 1 second before opening the browser
-    app.run(debug=True, use_reloader=False)
+    #Timer(1, open_browser).start()  # Wait 1 second before opening the browser
+    app.run(debug=True, use_reloader=True)

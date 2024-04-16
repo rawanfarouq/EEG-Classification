@@ -1,35 +1,31 @@
-<!-- templates/csv_files.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Link to Bootstrap CSS -->
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Additional custom styling -->
+    <title>CSV Files Page</title>
     <style>
         body {
             background-color: #f7f7f7;
-            color: #333;
-            font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-            padding-top: 40px;
         }
         .container {
-            background: white;
             border-radius: 5px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-            margin: auto;
-            max-width: 800px;
-            padding: 2rem;
+            padding: 20px;
+            background-color: #fff;
+            margin-top: 40px;
             margin-bottom: 40px;
         }
-        h1 {
+        h1, h2 {
             color: #007bff;
-            text-align: center;
-            margin-bottom: 2rem;
         }
         .message-box {
             margin-bottom: 1rem;
             padding: 1rem;
             background-color: #e7f3ff;
-            border: 1px solid #ddd;
+            border-left: 5px solid #007bff;
             border-radius: 0.25rem;
         }
         .message-box-header {
@@ -39,18 +35,7 @@
         .collapse-content {
             margin-top: 0.5rem;
         }
-        .toggle-button {
-            margin-bottom: 0.75rem;
-            display: block;
-            width: 100%;
-            text-align: left;
-        }
-        .collapse ol {
-            padding-left: 1.5rem;
-            margin-top: 0;
-        }
         .message-box p {
-            margin-bottom: 0.5rem;
             font-size: 1.1em;
             color: #333;
         }
@@ -58,36 +43,51 @@
             margin-bottom: 0.25rem;
         }
     </style>
-    <title>CSV Files Page</title>
 </head>
 <body>
+
     <div class="container">
         <h1>CSV Files Processed</h1>
         <!-- Display messages from the csv_identification function -->
         {% for message in messages %}
             {% if "The following feature extraction methods were identified:" in message %}
-                <!-- Display the toggle button -->
                 <div class="message-box">
                     <div class="message-box-header" data-toggle="collapse" data-target="#featureExtraction{{ loop.index }}">
                         View Extracted Features Methods
                     </div>
-                    <div class="collapse collapse-content" id="featureExtraction{{ loop.index }}">
-                        <p>{{ message.split(':')[0] }}:</p>
-                        <ol>
-                            {% for method in message.split(':')[1].split(',') %}
-                                <li>{{ method.strip() }}</li>
-                            {% endfor %}
-                        </ol>
+                    <div id="featureExtraction{{ loop.index }}" class="collapse">
+                        <div class="collapse-content">
+                            <p>{{ message.split(':')[0] }}:</p>
+                            <ol>
+                                {% for method in message.split(':')[1].split(',') %}
+                                    <li>{{ method.strip() }}</li>
+                                {% endfor %}
+                            </ol>
+                        </div>
                     </div>
                 </div>
             {% else %}
-                <!-- For other messages, display them as-is -->
-                <div class="message-box">{{ message }}</div>
+                <div class="message-box">
+                    {{ message }}
+                </div>
             {% endif %}
         {% endfor %}
     </div>
 
-    <!-- Include Bootstrap’s JavaScript and dependencies -->
+    <div class="container">
+        <h2>Model Accuracies</h2>
+        <button id="calculateAccuracies" class="btn btn-primary">Calculate Accuracies</button>
+        <!-- Progress bar (initially hidden) -->
+        <div id="progressBarContainer" style="display:none; margin-top: 20px;">
+            <div class="progress">
+                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                     role="progressbar" style="width: 100%"></div>
+            </div>
+        </div>
+        <div id="accuraciesContainer"></div>
+    </div>
+
+    <!-- Link to jQuery, Popper.js, and Bootstrap JS -->
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
@@ -104,5 +104,103 @@
             });
         });
     </script>
+   
+   <script>
+
+    function fetchProgress() {
+        fetch('/progress')
+        .then(response => response.json())
+        .then(data => {
+            let progressBar = document.querySelector('.progress-bar');
+            progressBar.style.width = data.progress + '%';
+            progressBar.setAttribute('aria-valuenow', data.progress);
+            progressBar.textContent = data.progress + '%';
+
+            // Continue polling if progress is not yet 100%
+            if (data.progress < 100) {
+                setTimeout(fetchProgress, 1000); // Adjust polling interval as needed
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    }
+
+
+    document.getElementById('calculateAccuracies').addEventListener('click', function() {
+    // Show the progress bar and initiate the first fetch
+    let progressBarContainer = document.getElementById('progressBarContainer');
+    progressBarContainer.style.display = 'block';
+    fetchProgress(); // Start polling for progress updates
+
+    // Now call the calculate-accuracies endpoint
+    fetch('/calculate-accuracies', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            console.error('Error:', data.error);
+            progressBarContainer.style.display = 'none';
+        } else {
+            // Once progress reaches 100%, display the accuracies
+            displayAccuracies(data.accuracies);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        progressBarContainer.style.display = 'none';
+    });
+});
+
+    function updateProgressBar(progressUpdates, displayAccuraciesCallback, accuracies) {
+            let progressBar = document.querySelector('.progress-bar');
+            let index = 0; // Start with the first progress update
+            
+            function update() {
+                if (index < progressUpdates.length) {
+                    // Set the width of the progress bar to the current progress update value
+                    progressBar.style.width = progressUpdates[index] + '%';
+                    progressBar.setAttribute('aria-valuenow', progressUpdates[index]);
+                    progressBar.textContent = progressUpdates[index] + '%'; // Optional: display the percentage on the bar
+                    index++ // Move to the next progress update
+                    console.log("Index:",index)
+                    // If this was the last update, call the displayAccuraciesCallback function
+                    if (index === 6) {
+                        // Hide the progress bar
+                        let progressBarContainer = document.getElementById('progressBarContainer');
+                        progressBarContainer.style.display = 'none';
+                        
+                        // Call the callback function to display the accuracies
+                        displayAccuraciesCallback(accuracies);
+                    } else {
+                        // Wait for 1 second before updating to the next value
+                        setTimeout(update, 1000);
+                    }
+                }
+            }
+            
+            update(); // Start the updates
+        }
+        function displayAccuracies(accuracies) {
+            let accuraciesContainer = document.getElementById('accuraciesContainer');
+            accuraciesContainer.innerHTML = ''; // Clear previous results
+            let list = document.createElement('ul');
+            list.className = 'list-group';
+            
+            Object.keys(accuracies).forEach(model => {
+                let listItem = document.createElement('li');
+                listItem.className = 'list-group-item';
+                listItem.textContent = `${model}: ${accuracies[model]}%`;
+                list.appendChild(listItem);
+            });
+            accuraciesContainer.appendChild(list);
+        }
+
+</script>
+
+
+    
+
 </body>
 </html>

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAT Classification</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            width: 80%;
+            background-color: #fff;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            background-color: #e9ecef;
+            margin-bottom: 8px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .no-steps {
+            color: #6c757d;
+        }
+        #stepsContainer {
+            display: none;
+        }
+        #toggleButton {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Mat File Classification</h1>
+    </div>
+
+    <button id="toggleButton" onclick="toggleSteps()">View Process Data</button>
+</div>
+
+        <div id="stepsContainer">
+            <h2>Preprocessing Steps:</h2>
+            
+            {% if preprocessing_steps %}
+                <ul>
+                    {% for step in preprocessing_steps %}
+                        <li>{{ step }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="no-steps">No preprocessing steps available.</p>
+            {% endif %}
+        
+    <script>
+        function toggleSteps() {
+            var button = document.getElementById('toggleButton');
+            var stepsContainer = document.getElementById('stepsContainer');
+            if (stepsContainer.style.display === 'none') {
+                stepsContainer.style.display = 'block';
+                button.textContent = 'Unview Process Data';
+            } else {
+                stepsContainer.style.display = 'none';
+                button.textContent = 'View Process Data';
+            }
+        }
+    </script>
+</body>
+</html>

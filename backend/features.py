@@ -19,7 +19,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 #from sklearn.svm import SVC
 #from sklearn.metrics import accuracy_score
 
-def files(fileName):
+def files(fileName, isTime):
     subid = fileName.split('_')[0]
     subjectfiles = glob.glob(subid + '*')
     subjectdata = []
@@ -28,7 +28,7 @@ def files(fileName):
         subjectdata.append(df)
 
     #filtereddata = [noiseCancellation(df) for df in subjectdata]
-    extract(subjectdata)
+    extract(subjectdata, isTime)
 
 
 def loadData(fileName):
@@ -200,13 +200,15 @@ def plot(self, dfs, filtereds):
     pass
 '''
     
-def extract(dfs):
+def extract(dfs, isTime):
     allfeatures = []
-    featuresheader = ['Channel', 'Minimum', 'Maximum', 'Mean', 'RMS', 'Variance', 'Standard Deviation',
-                        'Power', 'Peak', 'Peak-to-Peak', 'Crest Factor', 'Skew', 'Kurtosis',
-                        'Max_F', 'Sum_F', 'Mean_F', 'Variance_F', 'Peak_F', 'Skew_F', 'Kurtosis_F']
+    
     for df in dfs:
-        channelfeatures = channelextraction(df)
+        if(isTime):
+            channelfeatures, featuresheader = channelextractiontime(df)
+        else:
+            channelfeatures, featuresheader = channelextractionfreq(df)
+        #channelfeatures, featuresheader = channelextraction(df)
         allfeatures.append(pd.DataFrame(data=channelfeatures, columns=featuresheader))
 
     dffeatures = pd.concat(allfeatures, ignore_index=False) 
@@ -273,4 +275,56 @@ def channelextraction(df):
     #csvpath = os.path.join(current_dir, 'features.csv')
     #dffeatures.to_csv(csvpath, index=False)
     #return csvpath
-    return features
+    return features, featuresheader
+
+def channelextractiontime(df):
+    features = []
+
+    featuresheader = ['Channel', 'Minimum', 'Maximum', 'Mean', 'RMS', 'Variance', 'Standard Deviation',
+                        'Power', 'Peak', 'Peak-to-Peak', 'Crest Factor', 'Skew', 'Kurtosis']
+        
+    for channel in df.columns: 
+        channeldata = df[channel]
+            
+        #Time Domain
+        min_val = np.min(channeldata)
+        max_val = np.max(channeldata)
+        mean_val = np.mean(channeldata)
+        rms_val = np.sqrt(np.mean(channeldata**2))
+        var_val = np.var(channeldata)
+        std_val = np.std(channeldata)
+        power_val = np.mean(channeldata**2)
+        peak_val = np.max(np.abs(channeldata))
+        p2p_val = np.ptp(channeldata)
+        crest_factor_val = peak_val / rms_val
+        skew_val = stats.skew(channeldata)
+        kurtosis_val = stats.kurtosis(channeldata)
+            
+        features.append([channel, min_val, max_val, mean_val, rms_val, var_val, std_val, power_val, 
+                        peak_val, p2p_val, crest_factor_val, skew_val, kurtosis_val])
+        
+    return features, featuresheader
+
+def channelextractionfreq(df):
+    features = []
+
+    featuresheader = ['Channel', 'Maximum', 'Sum', 'Mean', 'Variance', 'Peak', 'Skew', 'Kurtosis']
+        
+    for channel in df.columns: 
+        channeldata = df[channel]
+            
+        #Frequency Domain
+        ft = fft(channeldata.values)
+        S = np.abs(ft)**2 / len(channeldata)
+        maxf_val = np.max(S)
+        sumf_val = np.sum(S)
+        meanf_val = np.mean(S)
+        varf_val = np.var(S)
+        peakf_val = np.max(np.abs(S))
+        skewf_val = stats.skew(S)
+        kurtosisf_val = stats.kurtosis(S)
+            
+        features.append([channel, maxf_val, 
+                        sumf_val, meanf_val, varf_val, peakf_val, skewf_val, kurtosisf_val])
+        
+    return features, featuresheader

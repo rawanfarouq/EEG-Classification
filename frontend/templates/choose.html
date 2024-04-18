@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Choose Analysis Domain</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            height: 100vh;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-top: 70px;
+        }
+        form {
+            width: 300px;
+            margin: auto;
+            margin-top: 80px;
+            background-color: #fff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        label {
+            display: block;
+            margin-bottom: 10px;
+        }
+        input[type="radio"] {
+            margin-right: 5px;
+        }
+        button[type="submit"] {
+            width: 100%;
+            background-color: #4CAF50;
+            color: white;
+            padding: 14px 20px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button[type="submit"]:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Choose Analysis Domain</h1>
+    <form id="analysisForm">
+        <label>
+            <input type="radio" name="domain" value="time" checked>
+            Time Domain
+        </label><br>
+        <label>
+            <input type="radio" name="domain" value="frequency">
+            Frequency Domain
+        </label><br>
+        <button type="submit">Submit</button>
+    </form>
+
+    <script>
+        var isTimeDomain = true;
+        
+        // Handle form submission
+        document.getElementById("analysisForm").addEventListener("submit", function(event) {
+            event.preventDefault();
+            
+            var selectedDomain = document.querySelector('input[name="domain"]:checked').value;
+            
+            if (selectedDomain === "time") {
+                isTimeDomain = true;
+            } else if (selectedDomain === "frequency") {
+                isTimeDomain = false;
+            }
+            //files(file_path, isTimeDomain)
+            
+            // Redirect to the appropriate page based on the selected domain
+            /*if (selectedDomain === "time") {
+                window.location.href = "time_analysis.html";
+            } else if (selectedDomain === "frequency") {
+                window.location.href = "frequency_analysis.html";
+            }
+            */
+        });
+    </script>
+</body>
+</html>

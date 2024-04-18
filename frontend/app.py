@@ -20,6 +20,10 @@ def upload():
 def plots():
      return render_template('plots.html')
 
+@app.route('/choose')
+def choose():
+     return render_template('choose.html')
+
 @app.route('/features')
 def features():
      return render_template('features.html')

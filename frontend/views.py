@@ -65,14 +65,13 @@ def home():
                 raw, sfreq = read_eeg_file(file_path)
             elif extension == 'edf':
                 raw, sfreq = read_edf_eeg(file_path)
-                files(file_path)
             elif extension == 'mat':
                 raw, sfreq, labels = read_mat_eeg(file_path)
-                files(file_path)
 
             if raw is not None:
                 # Process was successful
-                return jsonify({"message": "File successfully read"}), 200
+                return render_template("choose.html")
+                #return jsonify({"message": "File successfully read"}), 200
             else:
                 # Process failed
                 return jsonify({"message": "Failed to read the file"}), 500

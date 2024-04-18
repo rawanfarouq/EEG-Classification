@@ -682,7 +682,7 @@ def add_features_to_all_features(data):
     # and that the last column is the label
     return df
 
-def process_processed_data(data):
+def csv_features(data):
     global all_features
     print("The data appears to be processed and features are already extracted.")
 
@@ -849,7 +849,7 @@ def csv_identification(file_paths,processed_data_keywords):
                 else:
                     messages.append("There is no known extracted feature methods")  
 
-        process_processed_data(raw_data)   #CHECK IT PLEASE
+        csv_features(raw_data)   #function that takes the features and put it in a variable to model
     return messages,csv_only    
 
  
@@ -922,6 +922,7 @@ def csv_modeling():
         # session['progress'] = 20
 
         clf.fit(X_train, y_train)
+        
         y_pred_svc = clf.predict(X_test)
         acc_svc = round(accuracy_score(y_test,y_pred_svc)*100,2)
         precision_svc = round(precision_score(y_test, y_pred_svc, average='macro') * 100, 2)
@@ -999,6 +1000,7 @@ def csv_modeling():
         y_test_categorical = to_categorical(y_test)
 
         # Define the 1D CNN model
+        #filters detect different features in the data, kernel size of the sliding window
         model = Sequential()
         model.add(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(X_train_cnn.shape[1], 1)))
         model.add(Conv1D(filters=64, kernel_size=3, activation='relu'))
@@ -1012,7 +1014,9 @@ def csv_modeling():
         model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
         # Fit the model
-        model.fit(X_train_cnn, y_train_categorical, epochs=5, batch_size=32, verbose=1)
+        #epochs=5 means that the entire dataset will be passed through the CNN five times
+        #batch size means 
+        model.fit(X_train_cnn, y_train_categorical, epochs=5)
 
         # Evaluate the model
         _, accuracy = model.evaluate(X_test_cnn, y_test_categorical, verbose=0)
@@ -1033,11 +1037,11 @@ def csv_modeling():
         print("KNN Accuracy is:", (str(acc_knn) + '%'))
         print(f'CNN 1D - Accuracy: {accuracy * 100:.2f}%')
 
-        print("SVM Precision is:", (str(precision_svc) + '%'))
-        print("Random Forest Precision is:", (str(precision_rf) + '%'))
-        print("Logistic Regression Precision is:", (str(precision_lr) + '%'))
-        print("KNN Precision is:", (str(precision_knn) + '%'))
-        print("CNN Precision is:", (str(precision_cnn) + '%'))
+        # print("SVM Precision is:", (str(precision_svc) + '%'))
+        # print("Random Forest Precision is:", (str(precision_rf) + '%'))
+        # print("Logistic Regression Precision is:", (str(precision_lr) + '%'))
+        # print("KNN Precision is:", (str(precision_knn) + '%'))
+        # print("CNN Precision is:", (str(precision_cnn) + '%'))
 
 
 

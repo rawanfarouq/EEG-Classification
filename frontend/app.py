@@ -2,7 +2,7 @@ import webbrowser,os
 from threading import Timer
 from flask import Flask, render_template, session,flash,request,jsonify
 from frontend.views import views
-from components.file_reader import bp_file_reader
+from frontend.components.file_reader import bp_file_reader
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -50,10 +50,9 @@ def mat_classification():
 def predictions():
      return render_template('predictions.html')
 
-
-# def open_browser():
-#       webbrowser.open_new('http://127.0.0.1:5000/')
+def open_browser():
+     webbrowser.open_new('http://127.0.0.1:5000/')
 
 if __name__ == '__main__':
-    #Timer(1, open_browser).start()  # Wait 1 second before opening the browser
+    Timer(1, open_browser).start()  # Wait 1 second before opening the browser
     app.run(debug=True, use_reloader=True)

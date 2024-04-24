@@ -56,9 +56,9 @@
 </head>
 <body>
     <h1>EEG File Reader</h1>
-    <form action="/upload" method="POST" enctype="multipart/form-data">
-        <label for="file_path">Upload your EEG file or folder:</label><br>
-        <input type="file" id="file_path" name="file_path" webkitdirectory directory multiple required><br>
+    <form action="/upload" method="POST" enctype="multipart/form-data" onsubmit="logFormSubmission()">
+        <label for="file_path_upload">Upload your EEG file or folder:</label><br>
+        <input type="file" id="file_path_upload" name="file_path_upload" webkitdirectory directory multiple required><br>
         <input type="submit" value="Submit">
     </form>
 
@@ -69,6 +69,7 @@
 
 
     <script src="/static/code.js"></script>
+   
 
 </body>
 </html>

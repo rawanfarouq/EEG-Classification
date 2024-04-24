@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prediction File Reader</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            height: 100vh;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-top: 70px;
+        }
+        form {
+            width: 300px;
+            margin: auto;
+            margin-top: 140px;
+            background-color: #fff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        label {
+            display: block;
+            margin-bottom: 10px;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="submit"] {
+            width: 100%;
+            background-color: #4CAF50;
+            color: white;
+            padding: 14px 20px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        input[type="submit"]:hover {
+            background-color: #45a049;
+        }
+        #predictionResults {
+            margin-top: 40px;
+            text-align: center;
+        }
+        #predictionsDisplay {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            margin: auto;
+            width: 80%;
+        }
+        #predictionsDisplay p {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Prediction File Reader</h1>
+    <form action="/predictions" method="POST" enctype="multipart/form-data">
+        <label for="file_path">Upload your EEG folder:</label><br>
+        <input type="file" id="file_path_predict" name="file_path_predict" webkitdirectory directory multiple required><br>
+        <input type="submit" value="Submit">
+    </form>
+
+    <!-- Prediction Results Placeholder -->
+    <div id="predictionResults" style="display:none;">
+        <h2>Predictions:</h2>
+        <div id="predictionsDisplay"></div>
+    </div>
+
+    <!-- Add this div to your upload.html where you want the alerts to appear -->
+    <div id="alertBox"></div>
+    
+     
+
+
+    <script>
+        
+        document.querySelector('form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    const formData = new FormData(this);
+    const modelName = sessionStorage.getItem('selectedModel');
+    console.log(modelName)
+
+    if (!modelName) {
+        alert('No model selected. Please go back and select a model.');
+        return;
+    }
+    formData.append('model', modelName);
+
+    fetch('/predictions', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            // If the server response is not OK, throw an error with the status text
+            return response.json().then(errorData => {
+                throw new Error(`Error: ${response.status} ${response.statusText} - ${errorData.message}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+    if (data.status === 'success' && data.file_path_csv) {
+        return fetch('/predict', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ model: modelName, filenames: data.file_path_csv })
+        });
+    } else {
+        throw new Error(`Error processing files: ${data.message}`);
+    }
+})
+    .then(response => {
+        if (!response.ok) {
+            // If the server response is not OK, throw an error with the status text
+            return response.json().then(errorData => {
+                throw new Error(`Error: ${response.status} ${response.statusText} - ${errorData.message}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        
+        if (data.predictions) {
+            console.log('Predictions:', data.predictions);
+            displayPredictions(data.predictions);
+            removeFileUploader();
+        } else {
+            throw new Error('Failed to get predictions');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        // Display error in the UI
+        displayError(error);
+    });
+});
+
+function displayError(error) {
+    const errorDiv = document.getElementById('alertBox');
+    if (errorDiv) {
+        errorDiv.textContent = error.message;
+        errorDiv.style.display = 'block';
+    } else {
+        console.error('Alert box div not found on page.');
+    }
+}
+
+function displayPredictions(predictions) {
+    
+    var predictionsDisplay = document.getElementById('predictionsDisplay');
+    predictionsDisplay.innerHTML = ''; // Clear previous predictions
+    var check = true;
+
+    if (predictions !== null && typeof predictions === 'object') {
+        for (var model in predictions) {
+            if (predictions.hasOwnProperty(model)) {
+                // Add the model name to the display
+                var modelHeading = document.createElement('p');
+                modelHeading.innerHTML = "<strong>" + model + ":</strong>";
+                predictionsDisplay.appendChild(modelHeading);
+
+                // Create a list for the predictions
+                var predictionList = document.createElement('ul');
+                predictionList.style.listStyleType = 'none';
+                predictionList.style.paddingLeft = '0';
+
+                predictions[model].forEach(function(personPrediction) {
+                    var listItem = document.createElement('li');
+                    listItem.textContent = personPrediction;
+                    listItem.style.marginTop = '5px';
+                    listItem.style.padding = '10px';
+                    listItem.style.borderRadius = '4px';
+                    listItem.style.border = '1px solid #ddd';
+                    listItem.style.backgroundColor = '#f9f9f9';
+                    predictionList.appendChild(listItem);
+                });
+
+                predictionsDisplay.appendChild(predictionList);
+
+                var goBackButton = document.createElement('button');
+                goBackButton.textContent = 'Go back';
+                goBackButton.style.marginTop = '20px';
+                goBackButton.style.padding = '10px 15px';
+                goBackButton.style.border = 'none';
+                goBackButton.style.borderRadius = '4px';
+                goBackButton.style.backgroundColor = '#007bff';
+                goBackButton.style.color = 'white';
+                goBackButton.style.cursor = 'pointer';
+                goBackButton.addEventListener('click', function() {
+                // Set a flag in session storage indicating that the loading process has started
+                sessionStorage.setItem('loadingStatus', 'started');
+                sessionStorage.setItem('loadingMessage', 'Loading, please wait...');
+                document.getElementById('predictionsDisplay').innerHTML = "<p>Loading, please wait...</p>";
+                // Redirect to the CSV page
+                window.location.href = '/csv';
+
+                // Make the asynchronous call to the csv_features function
+                fetch('/csv_features', { method: 'POST' });
+
+    
+});              
+                predictionsDisplay.appendChild(goBackButton);
+            }
+        }
+    } else {
+        // Handle cases where predictions is not an object
+        predictionsDisplay.innerHTML = "<p>Unsupported prediction format.</p>";
+    }
+
+    document.getElementById('predictionResults').style.display = 'block';
+}
+
+
+function removeFileUploader() {
+    // Hide or remove the form
+    document.querySelector('form').style.display = 'none';
+}
+    </script>
+
+
+</body>
+</html>

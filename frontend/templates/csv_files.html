@@ -76,16 +76,22 @@
 
     <div class="container">
         <h2>Model Accuracies</h2>
-        <button id="calculateAccuracies" class="btn btn-primary">Calculate Accuracies</button>
-        <!-- Progress bar (initially hidden) -->
-        <div id="progressBarContainer" style="display:none; margin-top: 20px;">
-            <div class="progress">
-                <div class="progress-bar progress-bar-striped progress-bar-animated"
-                     role="progressbar" style="width: 100%"></div>
+        <div class="dropdown mb-3">
+            <button class="btn btn-primary dropdown-toggle" type="button" id="modelDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                Select Model
+            </button>
+            <div class="dropdown-menu" aria-labelledby="modelDropdown">
+                <button class="dropdown-item" id="calculateSVC">SVM</button>
+                <button class="dropdown-item" id="calculateRandomForest">Random Forest</button>
+                <button class="dropdown-item" id="calculateLogistic">Logistic Regression</button>
+                <button class="dropdown-item" id="calculateKNN">KNN</button>
+                <button class="dropdown-item" id="calculateCNN">CNN</button>
             </div>
         </div>
         <div id="accuraciesContainer"></div>
     </div>
+    <div id="alertBox" class="alert alert-info" style="display:none;"></div>
+    
 
     <!-- Link to jQuery, Popper.js, and Bootstrap JS -->
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
@@ -126,80 +132,164 @@
         });
     }
 
+      // Add event listeners for each button
+    document.getElementById('calculateSVC').addEventListener('click', function() {
+        fetchModelAccuracies('calculate-svc');
+    });
+    document.getElementById('calculateRandomForest').addEventListener('click', function() {
+        fetchModelAccuracies('calculate-random');
+    });
+    document.getElementById('calculateLogistic').addEventListener('click', function() {
+        fetchModelAccuracies('calculate-logistic');
+    });
+    document.getElementById('calculateKNN').addEventListener('click', function() {
+        fetchModelAccuracies('calculate-knn');
+    });
+    document.getElementById('calculateCNN').addEventListener('click', function() {
+        fetchModelAccuracies('calculate-cnn');
+    });
 
-    document.getElementById('calculateAccuracies').addEventListener('click', function() {
-    // Show the progress bar and initiate the first fetch
-    let progressBarContainer = document.getElementById('progressBarContainer');
-    progressBarContainer.style.display = 'block';
-    fetchProgress(); // Start polling for progress updates
-
-    // Now call the calculate-accuracies endpoint
-    fetch('/calculate-accuracies', {
-        method: 'POST'
+    // Function to fetch model accuracies
+    function fetchModelAccuracies(endpoint) {
+    fetch(`/${endpoint}`, {
+        method: 'POST',
+        
     })
     .then(response => response.json())
     .then(data => {
         if (data.error) {
             console.error('Error:', data.error);
-            progressBarContainer.style.display = 'none';
         } else {
-            // Once progress reaches 100%, display the accuracies
-            displayAccuracies(data.accuracies);
+            // Assuming the endpoint naming follows the convention 'calculate-{modelName}'
+            const modelName = endpoint.replace('calculate-', '');
+            console.log(modelName)
+            displayAccuracies(data.results, modelName);
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        progressBarContainer.style.display = 'none';
+    });
+}
+     
+     
+    
+function displayAccuracies(accuracies, modelName) {
+    let accuraciesContainer = document.getElementById('accuraciesContainer');
+    let modelPanelId = 'model-panel-' + modelName;
+    let modelPanel = document.getElementById(modelPanelId);
+
+    if (!modelPanel) {
+        // If the model panel does not exist, create it
+        modelPanel = document.createElement('div');
+        modelPanel.id = modelPanelId;
+        modelPanel.className = 'model-accuracies-panel mt-3';
+
+        let modelHeader = document.createElement('h3');
+        modelHeader.textContent = modelName;
+        modelPanel.appendChild(modelHeader);
+
+        let list = document.createElement('ul');
+        list.className = 'list-group';
+        
+        let listItemModel = document.createElement('li');
+            listItemModel.className = 'list-group-item';
+            listItemModel.textContent = `Model: ${accuracies['Model']}`;
+            list.appendChild(listItemModel);
+
+            let listItemAccuracy = document.createElement('li');
+            listItemAccuracy.className = 'list-group-item';
+            listItemAccuracy.textContent = `Accuracy: ${accuracies['Accuracy']}%`;
+            list.appendChild(listItemAccuracy);
+
+            let listItemPrecision = document.createElement('li');
+            listItemPrecision.className = 'list-group-item';
+            listItemPrecision.textContent = `Precision: ${accuracies['Precision']}%`;
+            list.appendChild(listItemPrecision);
+
+            let listItemF1Score = document.createElement('li');
+            listItemF1Score.className = 'list-group-item';
+            listItemF1Score.textContent = `F1 Score: ${accuracies['F1 Score']}%`;
+            list.appendChild(listItemF1Score);
+
+            let listItemRecall = document.createElement('li');
+            listItemRecall.className = 'list-group-item';
+            listItemRecall.textContent = `Recall: ${accuracies['Recall']}%`;
+            list.appendChild(listItemRecall);
+
+            accuraciesContainer.appendChild(list);
+        modelPanel.appendChild(list);
+
+        let predictButton = document.createElement('button');
+        predictButton.className = 'btn btn-info';
+        predictButton.textContent = 'Predict';
+        predictButton.onclick = function() {
+            sessionStorage.setItem('selectedModel', modelName);
+            console.log("csv model:",modelName)
+            window.location.href = '/predictions';
+        };
+        modelPanel.appendChild(predictButton);
+
+        let toggleButton = document.createElement('button');
+        toggleButton.className = 'btn btn-secondary ml-2';
+        toggleButton.textContent = 'Hide';
+        toggleButton.onclick = function() {
+            $(list).toggle();
+            toggleButton.textContent = $(list).is(':visible') ? 'Hide' : 'View ' + modelName;
+        };
+        modelPanel.appendChild(toggleButton);
+
+        accuraciesContainer.appendChild(modelPanel);
+    } else {
+        // If the model panel already exists, show it without fetching new data
+        $(`#${modelPanelId}`).show();
+    }
+}
+
+// Event listeners for dropdown items
+document.querySelectorAll('.dropdown-item').forEach(function(button) {
+    button.addEventListener('click', function() {
+        let modelName = button.textContent.trim();
+        let modelPanelId = 'model-panel-' + modelName.toLowerCase();
+        let modelPanel = document.getElementById(modelPanelId);
+
+        // If the model panel exists, show or hide it; otherwise, fetch the data
+        if (modelPanel) {
+            let list = modelPanel.querySelector('.list-group');
+            $(list).toggle();
+            let toggleButton = modelPanel.querySelector('.btn-secondary');
+            toggleButton.textContent = $(list).is(':visible') ? 'Hide' : 'View ' + modelName;
+        } 
     });
 });
 
-    function updateProgressBar(progressUpdates, displayAccuraciesCallback, accuracies) {
-            let progressBar = document.querySelector('.progress-bar');
-            let index = 0; // Start with the first progress update
-            
-            function update() {
-                if (index < progressUpdates.length) {
-                    // Set the width of the progress bar to the current progress update value
-                    progressBar.style.width = progressUpdates[index] + '%';
-                    progressBar.setAttribute('aria-valuenow', progressUpdates[index]);
-                    progressBar.textContent = progressUpdates[index] + '%'; // Optional: display the percentage on the bar
-                    index++ // Move to the next progress update
-                    console.log("Index:",index)
-                    // If this was the last update, call the displayAccuraciesCallback function
-                    if (index === 6) {
-                        // Hide the progress bar
-                        let progressBarContainer = document.getElementById('progressBarContainer');
-                        progressBarContainer.style.display = 'none';
-                        
-                        // Call the callback function to display the accuracies
-                        displayAccuraciesCallback(accuracies);
-                    } else {
-                        // Wait for 1 second before updating to the next value
-                        setTimeout(update, 1000);
-                    }
-                }
-            }
-            
-            update(); // Start the updates
-        }
-        function displayAccuracies(accuracies) {
-            let accuraciesContainer = document.getElementById('accuraciesContainer');
-            accuraciesContainer.innerHTML = ''; // Clear previous results
-            let list = document.createElement('ul');
-            list.className = 'list-group';
-            
-            Object.keys(accuracies).forEach(model => {
-                let listItem = document.createElement('li');
-                listItem.className = 'list-group-item';
-                listItem.textContent = `${model}: ${accuracies[model]}%`;
-                list.appendChild(listItem);
-            });
-            accuraciesContainer.appendChild(list);
-        }
-
 </script>
 
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        var loadingStatus = sessionStorage.getItem('loadingStatus');
 
+        if (loadingStatus === 'started') {
+            // Display the initial loading message
+            var alertBox = document.getElementById('alertBox');
+            alertBox.textContent = sessionStorage.getItem('loadingMessage');
+            alertBox.style.display = 'block';
+
+            // Wait for 10 seconds before updating the message
+            setTimeout(function() {
+                alertBox.textContent = 'Data loaded. You can now choose the model.';
+
+                // Wait for an additional 2 seconds before removing the alert
+                setTimeout(function() {
+                    alertBox.style.display = 'none'; // Hide the alert box
+                    // Clear the session storage flags
+                    sessionStorage.removeItem('loadingStatus');
+                    sessionStorage.removeItem('loadingMessage');
+                }, 3000); // 2000 milliseconds = 2 seconds
+
+            }, 9000); // 10000 milliseconds = 10 seconds
+        }
+    });
+</script>
     
 
 </body>

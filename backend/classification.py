@@ -15,7 +15,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
-from sklearn.metrics import classification_report, accuracy_score,precision_score
+from sklearn.metrics import classification_report, accuracy_score,precision_score,f1_score,recall_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder, LabelBinarizer
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.decomposition import PCA
@@ -53,13 +53,18 @@ from time import sleep
 from joblib import Parallel,delayed
 import tensorflow as tf
 from flask import session
-
+from joblib import dump, load
+import stat
 
 downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-dataverse_files_folder = os.path.join(downloads_folder, "features")  # Combine with the folder name
+dataverse_files_folder = os.path.join(downloads_folder, "archive (3)")  # Combine with the folder name
 
 # Use glob to get a list of file paths matching a specific pattern
-file_paths = glob(os.path.join(dataverse_files_folder, '*.*'))  #Getting all files with any extension
+file_paths = glob(os.path.join(dataverse_files_folder, '*.*'))  # Getting all files with any extension 
+conditions_file = os.path.join(downloads_folder, 'label_conditions.txt')
+
+
+
 
 all_features = pd.DataFrame()
 labels_list=[]
@@ -84,6 +89,25 @@ labels=[]
 features_df=pd.DataFrame()
 features_message=[]
 accuracy_mat=[]
+label_to_condition_mapping = {}
+label_conditions={}
+accuracy_svc_csv={}
+result_svc_csv={}
+accuracy_random_csv={}
+result_random_csv={}
+accuracy_logistic_csv={}
+result_logistic_csv={}
+accuracy_knn_csv={}
+result_knn_csv={}
+accuracy_cnn_csv={}
+result_cnn_csv={}
+model_svc_csv_prediction={}
+model_random_csv_prediction={}
+model_logistic_csv_prediction={}
+model_knn_csv_prediction={}
+model_cnn_csv_prediction={}
+
+
 
 # for file_path in file_paths:
 #     filename = os.path.basename(file_path)  # Extract the filename from the file path
@@ -93,17 +117,20 @@ accuracy_mat=[]
 
 def read_eeg_file(file_path):
     try:
+        print(f"Entered read_eeg_file with {file_path}")
+
         # Check the file extension and read the file into a DataFrame accordingly
         if file_path.endswith('.csv'):
             df = pd.read_csv(file_path)
         elif file_path.endswith(('.xls', '.xlsx', '.xlsm', '.xlsb')):
-            df = pd.read_excel(file_path)  # This reads the first sheet by default
+            df = pd.read_excel(file_path)  # This reads the first sheet by default 
+
         else:
             print(f"Unsupported file type for {file_path}.")
             return None, None
         
         print(f"Number of samples (time points) in the recording: {len(df)}")
-
+        print("DataFrame shape:" ,df.shape)
         # unique_prefixes = get_unique_prefixes(df.columns)
         # print("Unique prefixes:", unique_prefixes)
 
@@ -115,6 +142,7 @@ def read_eeg_file(file_path):
                 df.drop(col, axis=1, inplace=True)
                 
         print(df.head()) 
+        print("DataFrame shape:" ,df.shape)
         
 
         if check_processed_from_columns(df, processed_data_keywords):
@@ -126,6 +154,7 @@ def read_eeg_file(file_path):
             df.set_index(df.columns[0], inplace=True)
         
         print(df.head())  # Displays the first 5 rows of the DataFrame
+        print("DataFrame shape:" ,df.shape)
 
         # Check for a 'timestamp' column and calculate sampling frequency
         timestamp_present = 'timestamp' in df.columns
@@ -149,6 +178,8 @@ def read_eeg_file(file_path):
 
         # Create RawArray
         raw = mne.io.RawArray(data=eeg_data, info=info)
+        print(f"Number of samples read: {len(raw)}")
+
 
         return raw, sfreq
 
@@ -684,6 +715,7 @@ def add_features_to_all_features(data):
 
 def csv_features(data):
     global all_features
+    all_features=pd.DataFrame()
     print("The data appears to be processed and features are already extracted.")
 
     # Add a print statement to check the type of data received
@@ -700,6 +732,7 @@ def csv_features(data):
         print(e)
         # Here you can handle the case when data is not the correct type
         # For example, you might want to log the error and stop processing
+    return all_features    
 
 
 # Custom transformer to handle EEG data reshaping
@@ -867,9 +900,20 @@ def create_cnn_model(input_shape):
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 
+model_directory = 'E:/EEG-Classification/saved_models'
+os.makedirs(model_directory, exist_ok=True)
+model_svc = os.path.join(model_directory, 'svc_model.joblib')
+model_rf = os.path.join(model_directory, 'rf_model.joblib')
+model_lr = os.path.join(model_directory, 'lr_model.joblib')
+model_knn = os.path.join(model_directory, 'knn_model.joblib')
+model_cnn = os.path.join(model_directory, 'cnn_model.joblib')
+encoder_path = os.path.join(model_directory, 'label_encoder.joblib')
+y_original = None # original labels: the last column
+
 
 def csv_modeling():
         
+       
         progress_updates.append(10)
         # session['progress'] = 10
         # sleep(0.1)
@@ -878,22 +922,16 @@ def csv_modeling():
         print("Length of labels_list: ", len(labels_list))   
         
         X = all_features.iloc[:, :-1]  # features: all columns except the last
-        y_binned = label_encoder.fit_transform(all_features.iloc[:, -1])  # labels: the last column
+        y_original = all_features.iloc[:, -1]  # original labels: the last column
+    
+        # Fit the label encoder on the unique labels in the dataset
+        label_encoder.fit(np.unique(y_original))
 
+        # Transform labels to encoded numeric labels
+        y_binned = label_encoder.transform(y_original)
 
-        # clf_svc = SVC()
-        # scores_svc = cross_val_score(clf_svc, X, y_binned, cv=5)  # cv=5 for 5-fold cross-validation
-        # print("SVM cross-validation accuracy:", np.mean(scores_svc))
-
-        # # For Random Forest
-        # clf_rf = RandomForestClassifier(n_estimators=50, random_state=42)
-        # scores_rf = cross_val_score(clf_rf, X, y_binned, cv=5)
-        # print("Random Forest cross-validation accuracy:", np.mean(scores_rf))
-
-        # # For Gradient Boosting
-        # clf_gbc = GradientBoostingClassifier(n_estimators=50, random_state=42)
-        # scores_gbc = cross_val_score(clf_gbc, X, y_binned, cv=5)
-        # print("Gradient Boosting cross-validation accuracy:", np.mean(scores_gbc))
+    
+        dump(label_encoder, encoder_path)
 
 
         print("Y binned:", y_binned)
@@ -924,10 +962,12 @@ def csv_modeling():
         clf.fit(X_train, y_train)
         
         y_pred_svc = clf.predict(X_test)
-        acc_svc = round(accuracy_score(y_test,y_pred_svc)*100,2)
-        precision_svc = round(precision_score(y_test, y_pred_svc, average='macro') * 100, 2)
-
+        acc_svc = round(clf.score(X_test, y_test) * 100, 2)
         
+        dump(clf, model_svc)
+        print(f"Model saved to {model_svc}")
+
+        precision_svc = round(precision_score(y_test, y_pred_svc, average='macro') * 100, 2)
 
         # Initialize the classifier
         clf_rf = RandomForestClassifier(n_estimators=50)
@@ -942,7 +982,11 @@ def csv_modeling():
         y_pred_rf = clf_rf.predict(X_test)
 
         # Calculate the accuracy
-        acc_rf = round(accuracy_score(y_test,y_pred_rf)*100,2)
+        acc_rf = round(clf_rf.score(X_test, y_test) * 100, 2)
+
+        dump(clf_rf, model_rf)
+        print(f"Model saved to {model_rf}")
+
         precision_rf = round(precision_score(y_test, y_pred_rf, average='macro') * 100, 2)
 
 
@@ -971,7 +1015,11 @@ def csv_modeling():
         y_pred_lr = clf_lr.predict(X_test)
 
         # Calculate the accuracy
-        acc_lr = round(accuracy_score(y_test, y_pred_lr) * 100, 2)
+        acc_lr = round(clf_lr.score(X_test, y_test) * 100, 2)
+
+        dump(clf_lr, model_lr)
+        print(f"Model saved to {model_lr}")
+
         precision_lr = round(precision_score(y_test, y_pred_lr, average='macro') * 100, 2)
 
 
@@ -987,7 +1035,11 @@ def csv_modeling():
         y_pred_knn = clf_knn.predict(X_test)
 
         # Calculate the accuracy
-        acc_knn = round(accuracy_score(y_test, y_pred_knn) * 100, 2)
+        acc_knn = round(clf_knn.score(X_test, y_test) * 100, 2)
+
+        dump(clf_knn, model_knn)
+        print(f"Model saved to {model_knn}")
+
         precision_knn = round(precision_score(y_test, y_pred_knn, average='macro') * 100, 2)
         
 
@@ -1023,12 +1075,50 @@ def csv_modeling():
         y_pred_cnn = model.predict(X_test_cnn)
         y_pred_cnn_classes = y_pred_cnn.argmax(axis=-1)
 
+        dump(model, model_cnn)
+        print(f"Model saved to {model_cnn}")
+
         # Calculate precision for CNN
         precision_cnn = round(precision_score(y_test, y_pred_cnn_classes, average='macro') * 100, 2)
 
         progress_updates.append(100)
         # sleep(0.1)
         # session['progress'] = 100
+
+        # Train and evaluate models
+        models = [clf, clf_rf, clf_lr, clf_knn,model]
+        model_names = ['SVM', 'Random Forest', 'Logistic Regression', 'KNN','CNN']
+
+        results = {'Model': [], 'Accuracy': [], 'F1 Score': [], 'Precision': [], 'Recall': []}
+
+        for model, name in zip(models, model_names):
+            if name == 'CNN':
+                # Fit the CNN model with the correctly shaped data
+                model.fit(X_train_cnn, y_train_categorical, epochs=5)
+                # Use the CNN-specific data to make predictions
+                y_pred_probs = model.predict(X_test_cnn)
+                y_pred = y_pred_probs.argmax(axis=-1)
+            else:
+                # For non-CNN models, fit with the original data
+                model.fit(X_train, y_train)
+                # Use the original data to make predictions
+                y_pred = model.predict(X_test)
+                
+            # Calculate evaluation metrics
+            accuracy = accuracy_score(y_test, y_pred) *100
+            f1 = f1_score(y_test, y_pred, average='weighted')*100
+            precision = precision_score(y_test, y_pred, average='weighted')*100
+            recall = recall_score(y_test, y_pred, average='weighted')*100
+            # Store results
+            results['Model'].append(name)
+            results['Accuracy'].append(accuracy)
+            results['F1 Score'].append(f1)
+            results['Precision'].append(precision)
+            results['Recall'].append(recall)
+
+        # Display results
+        results_df = pd.DataFrame(results)
+        print(results_df)
 
 
         print("SVM Accuracy is:",(str(acc_svc)+'%'))
@@ -1042,9 +1132,6 @@ def csv_modeling():
         # print("Logistic Regression Precision is:", (str(precision_lr) + '%'))
         # print("KNN Precision is:", (str(precision_knn) + '%'))
         # print("CNN Precision is:", (str(precision_cnn) + '%'))
-
-
-
 
 
 
@@ -1062,7 +1149,780 @@ def csv_modeling():
 
         # print("Unique classes in y_train:", np.unique(y_train))
         # print("Unique classes in y_test:", np.unique(y_test)) 
-         
+
+
+def csv_svc_model():
+    print("Length of all_features: ", len(all_features))
+    print("Length of labels_list: ", len(labels_list))   
+    
+    X = all_features.iloc[:, :-1]  # features: all columns except the last
+    y_original = all_features.iloc[:, -1]  # original labels: the last column
+
+    # Fit the label encoder on the unique labels in the dataset
+    label_encoder.fit(np.unique(y_original))
+
+    # Transform labels to encoded numeric labels
+    y_binned = label_encoder.transform(y_original)
+
+    dump(label_encoder, encoder_path)
+
+    print("Y binned:", y_binned)
+    print("Last column: ",all_features.iloc[:, -1])
+
+    print("Y head:",y_binned[:5])  # To see the first few entries
+    print("Y unique:",np.unique(y_binned))  # To see the unique values
+
+    # Perform a train-test split
+    X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
+
+    # Standardize the features
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test= scaler.transform(X_test)
+
+    clf = SVC()
+    progress_updates.append(20)
+    # sleep(0.1)
+    # session['progress'] = 20
+
+    clf.fit(X_train, y_train)
+    
+    y_pred_svc = clf.predict(X_test)
+    acc_svc = round(clf.score(X_test, y_test) * 100, 2)
+    
+    dump(clf, model_svc)
+    print(f"Model saved to {model_svc}")
+    print("SVM Accuracy is:",(str(acc_svc)+'%'))
+
+    accuracy_svc_csv = {
+        'SVM': acc_svc}
+    
+    models = [clf]
+    model_names = ['SVM']
+
+    result_svc_csv = {'Model': [], 'Accuracy': [], 'F1 Score': [], 'Precision': [], 'Recall': []}
+
+    for model, name in zip(models, model_names):
+        
+        # For non-CNN models, fit with the original data
+        model.fit(X_train, y_train)
+        # Use the original data to make predictions
+        y_pred = model.predict(X_test)
+            
+        # Calculate evaluation metrics
+        accuracy = accuracy_score(y_test, y_pred) *100
+        f1 = f1_score(y_test, y_pred, average='weighted')*100
+        precision = precision_score(y_test, y_pred, average='weighted')*100
+        recall = recall_score(y_test, y_pred, average='weighted')*100
+        # Store results
+        result_svc_csv['Model'].append(name)
+        result_svc_csv['Accuracy'].append(accuracy)
+        result_svc_csv['F1 Score'].append(f1)
+        result_svc_csv['Precision'].append(precision)
+        result_svc_csv['Recall'].append(recall)
+    
+    return accuracy_svc_csv,result_svc_csv
+
+def csv_random_model():
+    print("Length of all_features: ", len(all_features))
+    print("Length of labels_list: ", len(labels_list))   
+    
+    X = all_features.iloc[:, :-1]  # features: all columns except the last
+    y_original = all_features.iloc[:, -1]  # original labels: the last column
+
+    # Fit the label encoder on the unique labels in the dataset
+    label_encoder.fit(np.unique(y_original))
+
+    # Transform labels to encoded numeric labels
+    y_binned = label_encoder.transform(y_original)
+
+    dump(label_encoder, encoder_path)
+
+    print("Y binned:", y_binned)
+    print("Last column: ",all_features.iloc[:, -1])
+
+    print("Y head:",y_binned[:5])  # To see the first few entries
+    print("Y unique:",np.unique(y_binned))  # To see the unique values
+
+    # Perform a train-test split
+    X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
+
+    # Standardize the features
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test= scaler.transform(X_test)
+    # Initialize the classifier
+    clf_rf = RandomForestClassifier(n_estimators=50)
+    progress_updates.append(40)
+    # sleep(0.1)
+    # session['progress'] = 40
+
+    # Fit the classifier to the training data
+    clf_rf.fit(X_train, y_train)
+
+    # Predict on the test data
+    y_pred_rf = clf_rf.predict(X_test)
+
+    # Calculate the accuracy
+    acc_rf = round(clf_rf.score(X_test, y_test) * 100, 2)
+
+    dump(clf_rf, model_rf)
+    print(f"Model saved to {model_rf}")
+    print("Random Forest accuracy is:", (str(acc_rf) + '%'))
+
+    accuracy_random_csv = {
+        'Random Forest': acc_rf}
+    
+    models = [clf_rf]
+    model_names = ['Random Forest']
+
+    result_random_csv = {'Model': [], 'Accuracy': [], 'F1 Score': [], 'Precision': [], 'Recall': []}
+
+    for model, name in zip(models, model_names):
+        
+        # For non-CNN models, fit with the original data
+        model.fit(X_train, y_train)
+        # Use the original data to make predictions
+        y_pred = model.predict(X_test)
+            
+        # Calculate evaluation metrics
+        accuracy = accuracy_score(y_test, y_pred) *100
+        f1 = f1_score(y_test, y_pred, average='weighted')*100
+        precision = precision_score(y_test, y_pred, average='weighted')*100
+        recall = recall_score(y_test, y_pred, average='weighted')*100
+        # Store results
+        result_random_csv['Model'].append(name)
+        result_random_csv['Accuracy'].append(accuracy)
+        result_random_csv['F1 Score'].append(f1)
+        result_random_csv['Precision'].append(precision)
+        result_random_csv['Recall'].append(recall)
+
+    return accuracy_random_csv,result_random_csv
+
+def csv_logistic_model():
+    print("Length of all_features: ", len(all_features))
+    print("Length of labels_list: ", len(labels_list))   
+    
+    X = all_features.iloc[:, :-1]  # features: all columns except the last
+    y_original = all_features.iloc[:, -1]  # original labels: the last column
+
+    # Fit the label encoder on the unique labels in the dataset
+    label_encoder.fit(np.unique(y_original))
+
+    # Transform labels to encoded numeric labels
+    y_binned = label_encoder.transform(y_original)
+
+    dump(label_encoder, encoder_path)
+
+    print("Y binned:", y_binned)
+    print("Last column: ",all_features.iloc[:, -1])
+
+    print("Y head:",y_binned[:5])  # To see the first few entries
+    print("Y unique:",np.unique(y_binned))  # To see the unique values
+
+    # Perform a train-test split
+    X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
+
+    # Standardize the features
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test= scaler.transform(X_test)
+
+    clf_lr = LogisticRegression()
+    progress_updates.append(60)
+    # sleep(0.1)
+    # session['progress'] = 60
+
+    # Fit the classifier to the training data
+    clf_lr.fit(X_train, y_train)
+
+    # Predict on the test data
+    y_pred_lr = clf_lr.predict(X_test)
+
+    # Calculate the accuracy
+    acc_lr = round(clf_lr.score(X_test, y_test) * 100, 2)
+
+    dump(clf_lr, model_lr)
+    print(f"Model saved to {model_lr}")
+    print("Logistic Regression Classifier accuracy is:", (str(acc_lr) + '%')) 
+
+    accuracy_logistic_csv = {
+        'Logistic Regression': acc_lr}
+    
+    models = [clf_lr]
+    model_names = ['Logistic Regression']
+
+    result_logistic_csv = {'Model': [], 'Accuracy': [], 'F1 Score': [], 'Precision': [], 'Recall': []}
+
+    for model, name in zip(models, model_names):
+        
+        # For non-CNN models, fit with the original data
+        model.fit(X_train, y_train)
+        # Use the original data to make predictions
+        y_pred = model.predict(X_test)
+            
+        # Calculate evaluation metrics
+        accuracy = accuracy_score(y_test, y_pred) *100
+        f1 = f1_score(y_test, y_pred, average='weighted')*100
+        precision = precision_score(y_test, y_pred, average='weighted')*100
+        recall = recall_score(y_test, y_pred, average='weighted')*100
+        # Store results
+        result_logistic_csv['Model'].append(name)
+        result_logistic_csv['Accuracy'].append(accuracy)
+        result_logistic_csv['F1 Score'].append(f1)
+        result_logistic_csv['Precision'].append(precision)
+        result_logistic_csv['Recall'].append(recall)
+    
+    return accuracy_logistic_csv,result_logistic_csv
+
+
+def csv_knn_model():
+    print("Length of all_features: ", len(all_features))
+    print("Length of labels_list: ", len(labels_list))   
+    
+    X = all_features.iloc[:, :-1]  # features: all columns except the last
+    y_original = all_features.iloc[:, -1]  # original labels: the last column
+
+    # Fit the label encoder on the unique labels in the dataset
+    label_encoder.fit(np.unique(y_original))
+
+    # Transform labels to encoded numeric labels
+    y_binned = label_encoder.transform(y_original)
+
+    dump(label_encoder, encoder_path)
+
+    print("Y binned:", y_binned)
+    print("Last column: ",all_features.iloc[:, -1])
+
+    print("Y head:",y_binned[:5])  # To see the first few entries
+    print("Y unique:",np.unique(y_binned))  # To see the unique values
+
+    # Perform a train-test split
+    X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
+
+    # Standardize the features
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test= scaler.transform(X_test)
+
+    clf_knn = KNeighborsClassifier(n_neighbors=5)  # You can tune the n_neighbors parameter.
+    progress_updates.append(80)
+    # sleep(0.1) 
+    # session['progress'] = 80
+
+    # Fit the classifier to the training data
+    clf_knn.fit(X_train, y_train)
+
+    # Predict on the test data
+    y_pred_knn = clf_knn.predict(X_test)
+
+    # Calculate the accuracy
+    acc_knn = round(clf_knn.score(X_test, y_test) * 100, 2)
+
+    dump(clf_knn, model_knn)
+    print(f"Model saved to {model_knn}")
+    print("KNN Accuracy is:", (str(acc_knn) + '%'))
+
+    accuracy_knn_csv = {
+        'KNN': acc_knn}
+    
+    models = [clf_knn]
+    model_names = ['KNN']
+
+    result_knn_csv = {'Model': [], 'Accuracy': [], 'F1 Score': [], 'Precision': [], 'Recall': []}
+
+    for model, name in zip(models, model_names):
+        
+        # For non-CNN models, fit with the original data
+        model.fit(X_train, y_train)
+        # Use the original data to make predictions
+        y_pred = model.predict(X_test)
+            
+        # Calculate evaluation metrics
+        accuracy = accuracy_score(y_test, y_pred) *100
+        f1 = f1_score(y_test, y_pred, average='weighted')*100
+        precision = precision_score(y_test, y_pred, average='weighted')*100
+        recall = recall_score(y_test, y_pred, average='weighted')*100
+        # Store results
+        result_knn_csv['Model'].append(name)
+        result_knn_csv['Accuracy'].append(accuracy)
+        result_knn_csv['F1 Score'].append(f1)
+        result_knn_csv['Precision'].append(precision)
+        result_knn_csv['Recall'].append(recall)
+    
+    return accuracy_knn_csv,result_knn_csv
+
+
+def csv_cnn_model():
+    print("Length of all_features: ", len(all_features))
+    print("Length of labels_list: ", len(labels_list))   
+    
+    X = all_features.iloc[:, :-1]  # features: all columns except the last
+    y_original = all_features.iloc[:, -1]  # original labels: the last column
+
+    # Fit the label encoder on the unique labels in the dataset
+    label_encoder.fit(np.unique(y_original))
+
+    # Transform labels to encoded numeric labels
+    y_binned = label_encoder.transform(y_original)
+
+    dump(label_encoder, encoder_path)
+
+    print("Y binned:", y_binned)
+    print("Last column: ",all_features.iloc[:, -1])
+
+    print("Y head:",y_binned[:5])  # To see the first few entries
+    print("Y unique:",np.unique(y_binned))  # To see the unique values
+
+    # Perform a train-test split
+    X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
+
+    # Standardize the features
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test= scaler.transform(X_test)
+
+    # Reshape data for 1D CNN input (batch_size, steps, input_dimension)
+    X_train_cnn = np.expand_dims(X_train, axis=2)
+    X_test_cnn = np.expand_dims(X_test, axis=2)
+
+    # Convert labels to categorical (one-hot encoding)
+    y_train_categorical = to_categorical(y_train)
+    y_test_categorical = to_categorical(y_test)
+
+    # Define the 1D CNN model
+    #filters detect different features in the data, kernel size of the sliding window
+    model = Sequential()
+    model.add(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(X_train_cnn.shape[1], 1)))
+    model.add(Conv1D(filters=64, kernel_size=3, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(MaxPooling1D(pool_size=2))
+    model.add(Flatten())
+    model.add(Dense(100, activation='relu'))
+    model.add(Dense(y_train_categorical.shape[1], activation='softmax'))
+
+    # Compile the model
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+    # Fit the model
+    #epochs=5 means that the entire dataset will be passed through the CNN five times
+    #batch size means 
+    model.fit(X_train_cnn, y_train_categorical, epochs=5)
+
+    # Evaluate the model
+    _, accuracy = model.evaluate(X_test_cnn, y_test_categorical, verbose=0)
+    y_pred_cnn = model.predict(X_test_cnn)
+    y_pred_cnn_classes = y_pred_cnn.argmax(axis=-1)
+
+    dump(model, model_cnn)
+    print(f"Model saved to {model_cnn}")
+    print(f'CNN 1D - Accuracy: {accuracy * 100:.2f}%')
+    accuracy_cnn_csv = {
+        'CNN': accuracy*100}
+    
+    models = [model]
+    model_names = ['CNN']
+
+    result_cnn_csv= {'Model': [], 'Accuracy': [], 'F1 Score': [], 'Precision': [], 'Recall': []}
+
+    for model, name in zip(models, model_names):
+        if name == 'CNN':
+            # Fit the CNN model with the correctly shaped data
+            model.fit(X_train_cnn, y_train_categorical, epochs=5)
+            # Use the CNN-specific data to make predictions
+            y_pred_probs = model.predict(X_test_cnn)
+            y_pred = y_pred_probs.argmax(axis=-1)
+            
+        # Calculate evaluation metrics
+        accuracy = accuracy_score(y_test, y_pred) *100
+        f1 = f1_score(y_test, y_pred, average='weighted')*100
+        precision = precision_score(y_test, y_pred, average='weighted')*100
+        recall = recall_score(y_test, y_pred, average='weighted')*100
+        # Store results
+        result_cnn_csv['Model'].append(name)
+        result_cnn_csv['Accuracy'].append(accuracy)
+        result_cnn_csv['F1 Score'].append(f1)
+        result_cnn_csv['Precision'].append(precision)
+        result_cnn_csv['Recall'].append(recall)
+    
+    return accuracy_cnn_csv,result_cnn_csv
+
+def read_label_conditions(file_path):
+    print("entered read label")
+    with open(file_path, 'r') as file:
+        label_conditions = {}
+
+        for line in file:
+            parts = line.split(':')
+            if len(parts) == 2:
+                # Trim whitespace and convert keys to strings
+                key = parts[0].strip()
+                # Ensure that numeric keys are stored as strings
+                if key.isdigit():
+                    key = str(int(key))  # Convert digits to integers, then to strings to remove leading zeros
+                # Convert everything to a consistent case
+                label_conditions[key.lower()] = parts[1].strip()
+    return label_conditions
+
+def load_and_predict(new_data, label_conditions):
+    if not os.path.exists(encoder_path):
+        raise FileNotFoundError("Could not find the label encoder at the specified path.")
+
+    label_encoder = load(encoder_path)
+    formatted_predictions = {}
+    # Dictionary to store model paths
+    model_paths = {
+        'Model_SVC': model_svc,
+        'Model_RF': model_rf,
+        'Model_LR': model_lr,
+        'Model_KNN': model_knn,
+        'Model_CNN': model_cnn
+    }
+
+    scaler = StandardScaler()
+    new_data_scaled = scaler.fit_transform(new_data)
+
+    # Dictionary to store predictions
+    model_predictions = {}
+    formatted_model_predictions={}
+
+    for model_name, model_path in model_paths.items():
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Could not find the model at the specified path: {model_path}")
+
+        model_loaded = load(model_path)
+        print("Label conditions dictionary:", label_conditions)
+
+        if model_name == 'Model_CNN':
+            # Assuming new_data is a DataFrame
+            new_data_transformed = np.expand_dims(new_data_scaled, axis=2)
+            numeric_predictions = model_loaded.predict(new_data_transformed).argmax(axis=-1)
+        else:
+            numeric_predictions = model_loaded.predict(new_data_scaled)
+    
+        
+        print(f"Numeric predictions from {model_name}:", numeric_predictions)
+
+        # Check if inverse_transform returns floating numbers and convert them accordingly
+        inverse_transformed = label_encoder.inverse_transform(numeric_predictions)
+        if np.issubdtype(inverse_transformed.dtype, np.floating):
+            label_predictions = [str(int(float(label)/1000000)) for label in inverse_transformed]
+        else:
+            label_predictions = [str(label).lower() for label in inverse_transformed]
+        
+        print(f"Label predictions from {model_name}:", label_predictions)
+        conditions = [label_conditions.get(label, "Unknown condition") for label in label_predictions]
+        formatted_predictions = [f"Person {i+1} = {condition}" 
+                                 for i, condition in enumerate(conditions)]
+        
+        # Store the formatted predictions in the dictionary
+        formatted_model_predictions[model_name] = formatted_predictions
+    
+    # Print the formatted predictions
+    for model_name, formatted_predictions in formatted_model_predictions.items():
+        print(f"Predictions from {model_name}:")
+        for prediction in formatted_predictions:
+            print(prediction)
+        print()  # Adds an empty line for better readability
+
+    return model_predictions  # You can also choose to return the dictionary if needed elsewhere
+
+
+def load_and_predict_svc(new_data, label_conditions):
+    if not os.path.exists(encoder_path):
+        raise FileNotFoundError("Could not find the label encoder at the specified path.")
+
+    label_encoder = load(encoder_path)
+
+    # Dictionary to store model paths
+    model_paths = {
+        'Model_SVC': model_svc,
+    }
+
+    scaler = StandardScaler()
+    new_data_scaled = scaler.fit_transform(new_data)
+
+    # Dictionary to store predictions
+    model_predictions = {}
+    formatted_model_predictions = {}
+
+    # Dictionary to store all formatted predictions
+    #model_svc_csv_prediction = {}
+
+    for model_name, model_path in model_paths.items():
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Could not find the model at the specified path: {model_path}")
+
+        model_loaded = load(model_path)
+
+
+        numeric_predictions = model_loaded.predict(new_data_scaled)
+
+        # Convert numeric predictions to labels
+        inverse_transformed = label_encoder.inverse_transform(numeric_predictions)
+        if np.issubdtype(inverse_transformed.dtype, np.floating):
+            label_predictions = [str(int(float(label)/1000000)) for label in inverse_transformed]
+        else:
+            label_predictions = [str(label).lower() for label in inverse_transformed]
+
+        # Convert labels to conditions
+        conditions = [label_conditions.get(label, "Unknown condition") for label in label_predictions]
+        formatted_predictions = [f"Person {i+1} = {condition}" 
+                                 for i, condition in enumerate(conditions)]
+        
+        # Store the formatted predictions in the dictionary
+        formatted_model_predictions[model_name] = formatted_predictions
+
+    # Store all formatted predictions in the dictionary
+    for model_name, formatted_predictions in formatted_model_predictions.items():
+        model_svc_csv_prediction[model_name] = formatted_predictions
+
+    # for model_name, formatted_predictions in formatted_model_predictions.items():
+    #     print(f"Predictions from {model_name}:")
+    #     for prediction in formatted_predictions:
+    #         print(prediction)
+    #     print()      
+
+    # Return the dictionary containing all model predictions
+    return model_svc_csv_prediction
+
+def load_and_predict_random(new_data, label_conditions):
+    if not os.path.exists(encoder_path):
+        raise FileNotFoundError("Could not find the label encoder at the specified path.")
+
+    label_encoder = load(encoder_path)
+
+    # Dictionary to store model paths
+    model_paths = {
+        'Model_RF': model_rf,
+    }
+
+    scaler = StandardScaler()
+    new_data_scaled = scaler.fit_transform(new_data)
+
+    # Dictionary to store predictions
+    model_predictions = {}
+    formatted_model_predictions = {}
+
+    # Dictionary to store all formatted predictions
+    #model_random_csv_prediction = {}
+
+    for model_name, model_path in model_paths.items():
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Could not find the model at the specified path: {model_path}")
+
+        model_loaded = load(model_path)
+
+        
+        numeric_predictions = model_loaded.predict(new_data_scaled)
+
+        # Convert numeric predictions to labels
+        inverse_transformed = label_encoder.inverse_transform(numeric_predictions)
+        if np.issubdtype(inverse_transformed.dtype, np.floating):
+            label_predictions = [str(int(float(label)/1000000)) for label in inverse_transformed]
+        else:
+            label_predictions = [str(label).lower() for label in inverse_transformed]
+
+        # Convert labels to conditions
+        conditions = [label_conditions.get(label, "Unknown condition") for label in label_predictions]
+        formatted_predictions = [f"Person {i+1} = {condition}" 
+                                 for i, condition in enumerate(conditions)]
+        
+        # Store the formatted predictions in the dictionary
+        formatted_model_predictions[model_name] = formatted_predictions
+
+    # Store all formatted predictions in the dictionary
+    for model_name, formatted_predictions in formatted_model_predictions.items():
+        model_random_csv_prediction[model_name] = formatted_predictions
+
+    for model_name, formatted_predictions in formatted_model_predictions.items():
+        print(f"Predictions from {model_name}:")
+        for prediction in formatted_predictions:
+            print(prediction)
+        print()
+
+    # Return the dictionary containing all model predictions
+    return model_random_csv_prediction
+
+def load_and_predict_logisitc(new_data, label_conditions):
+    if not os.path.exists(encoder_path):
+        raise FileNotFoundError("Could not find the label encoder at the specified path.")
+
+    label_encoder = load(encoder_path)
+
+    # Dictionary to store model paths
+    model_paths = {
+        'Model_LR': model_lr,
+    }
+
+    scaler = StandardScaler()
+    new_data_scaled = scaler.fit_transform(new_data)
+
+    # Dictionary to store predictions
+    model_predictions = {}
+    formatted_model_predictions = {}
+
+    # Dictionary to store all formatted predictions
+    #model_logistic_csv_prediction = {}
+
+    for model_name, model_path in model_paths.items():
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Could not find the model at the specified path: {model_path}")
+
+        model_loaded = load(model_path)
+
+        
+        numeric_predictions = model_loaded.predict(new_data_scaled)
+
+        # Convert numeric predictions to labels
+        inverse_transformed = label_encoder.inverse_transform(numeric_predictions)
+        if np.issubdtype(inverse_transformed.dtype, np.floating):
+            label_predictions = [str(int(float(label)/1000000)) for label in inverse_transformed]
+        else:
+            label_predictions = [str(label).lower() for label in inverse_transformed]
+
+        # Convert labels to conditions
+        conditions = [label_conditions.get(label, "Unknown condition") for label in label_predictions]
+        formatted_predictions = [f"Person {i+1} = {condition}" 
+                                 for i, condition in enumerate(conditions)]
+        
+        # Store the formatted predictions in the dictionary
+        formatted_model_predictions[model_name] = formatted_predictions
+
+    # Store all formatted predictions in the dictionary
+    for model_name, formatted_predictions in formatted_model_predictions.items():
+        model_logistic_csv_prediction[model_name] = formatted_predictions
+    
+    for model_name, formatted_predictions in formatted_model_predictions.items():
+        print(f"Predictions from {model_name}:")
+        for prediction in formatted_predictions:
+            print(prediction)
+        print()
+
+    # Return the dictionary containing all model predictions
+    return model_logistic_csv_prediction
+
+
+def load_and_predict_knn(new_data, label_conditions):
+    if not os.path.exists(encoder_path):
+        raise FileNotFoundError("Could not find the label encoder at the specified path.")
+
+    label_encoder = load(encoder_path)
+
+    # Dictionary to store model paths
+    model_paths = {
+        'Model_KNN': model_knn,
+    }
+
+    scaler = StandardScaler()
+    new_data_scaled = scaler.fit_transform(new_data)
+
+    # Dictionary to store predictions
+    model_predictions = {}
+    formatted_model_predictions = {}
+
+    # Dictionary to store all formatted predictions
+    #model_knn_csv_prediction = {}
+
+    for model_name, model_path in model_paths.items():
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Could not find the model at the specified path: {model_path}")
+
+        model_loaded = load(model_path)
+
+       
+        numeric_predictions = model_loaded.predict(new_data_scaled)
+
+        # Convert numeric predictions to labels
+        inverse_transformed = label_encoder.inverse_transform(numeric_predictions)
+        if np.issubdtype(inverse_transformed.dtype, np.floating):
+            label_predictions = [str(int(float(label)/1000000)) for label in inverse_transformed]
+        else:
+            label_predictions = [str(label).lower() for label in inverse_transformed]
+
+        # Convert labels to conditions
+        conditions = [label_conditions.get(label, "Unknown condition") for label in label_predictions]
+        formatted_predictions = [f"Person {i+1} = {condition}" 
+                                 for i, condition in enumerate(conditions)]
+        
+        # Store the formatted predictions in the dictionary
+        formatted_model_predictions[model_name] = formatted_predictions
+
+    # Store all formatted predictions in the dictionary
+    for model_name, formatted_predictions in formatted_model_predictions.items():
+        model_knn_csv_prediction[model_name] = formatted_predictions
+    
+    for model_name, formatted_predictions in formatted_model_predictions.items():
+        print(f"Predictions from {model_name}:")
+        for prediction in formatted_predictions:
+            print(prediction)
+        print()
+
+    # Return the dictionary containing all model predictions
+    return model_knn_csv_prediction
+
+def load_and_predict_cnn(new_data, label_conditions):
+    if not os.path.exists(encoder_path):
+        raise FileNotFoundError("Could not find the label encoder at the specified path.")
+
+    label_encoder = load(encoder_path)
+
+    # Dictionary to store model paths
+    model_paths = {
+        'Model_CNN': model_cnn
+    }
+
+    scaler = StandardScaler()
+    new_data_scaled = scaler.fit_transform(new_data)
+
+    # Dictionary to store predictions
+    model_predictions = {}
+    formatted_model_predictions = {}
+
+    # Dictionary to store all formatted predictions
+    #model_cnn_csv_prediction = {}
+
+    for model_name, model_path in model_paths.items():
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Could not find the model at the specified path: {model_path}")
+
+        model_loaded = load(model_path)
+
+        if model_name == 'Model_CNN':
+            # Assuming new_data is a DataFrame
+            new_data_transformed = np.expand_dims(new_data_scaled, axis=2)
+            numeric_predictions = model_loaded.predict(new_data_transformed).argmax(axis=-1)
+        else:
+            numeric_predictions = model_loaded.predict(new_data_scaled)
+
+        # Convert numeric predictions to labels
+        inverse_transformed = label_encoder.inverse_transform(numeric_predictions)
+        if np.issubdtype(inverse_transformed.dtype, np.floating):
+            label_predictions = [str(int(float(label)/1000000)) for label in inverse_transformed]
+        else:
+            label_predictions = [str(label).lower() for label in inverse_transformed]
+
+        # Convert labels to conditions
+        conditions = [label_conditions.get(label, "Unknown condition") for label in label_predictions]
+        formatted_predictions = [f"Person {i+1} = {condition}" 
+                                 for i, condition in enumerate(conditions)]
+        
+        # Store the formatted predictions in the dictionary
+        formatted_model_predictions[model_name] = formatted_predictions
+
+    # Store all formatted predictions in the dictionary
+    for model_name, formatted_predictions in formatted_model_predictions.items():
+        model_cnn_csv_prediction[model_name] = formatted_predictions
+    
+    for model_name, formatted_predictions in formatted_model_predictions.items():
+        print(f"Predictions from {model_name}:")
+        for prediction in formatted_predictions:
+            print(prediction)
+        print()
+
+    # Return the dictionary containing all model predictions
+    return model_cnn_csv_prediction
+
 def mat_modeling(subject_identifier,features_df,labels):
 
     if subject_identifier not in subject_data:
@@ -1229,7 +2089,15 @@ def mat_modeling(subject_identifier,features_df,labels):
     #     overall_accuracy = accuracy_score(all_true_labels, all_predictions)
     #     print(f'All model accuracy across all files: {overall_accuracy * 100:.2f}%')
  
-
+def get_label_text():
+    global label_conditions
+    for file_path in file_paths:
+        if file_path.endswith('.txt'):
+            txt_files = glob(os.path.join(file_path, '*.txt'))
+            print("Txt files:", txt_files) 
+            print("text entered")
+            # Assuming there's only one TXT file in the directory
+            label_conditions = read_label_conditions(file_path) 
 
 def main():
 
@@ -1249,13 +2117,20 @@ def main():
     proces_with_builtin_accuracy= False
     csv_only= False
     edf_only=False
+    csv_test=False
 
     for file_path in file_paths:
         
-        
+        print(f"File found: {file_path}, with extension: {os.path.splitext(file_path)[1]}")
+
         # Determine the type of file and handle it accordingly
-        if file_path.lower().endswith(('.csv', '.xls', '.xlsx', '.xlsm', '.xlsb')):
+        if file_path.lower().endswith(('.csv', '.xls', '.xlsx', '.xlsm', '.xlsb','.txt')):
+            
             csv_only= True
+            csv_test=True
+            raw_data, sfreq = read_eeg_file(file_path)
+            # csv_features(raw_data)
+            #get_label_text()
             messages,csv_only=csv_identification(file_paths,processed_data_keywords)
             for message in messages:
                 print("Message:", message)
@@ -1650,7 +2525,13 @@ def main():
 
     # else:
     if csv_only | edf_only:        
-       csv_modeling()
+       #csv_modeling()
+       csv_svc_model()
+    # else:
+    #     label_conditions = read_label_conditions(conditions_file)
+    #     conditions = load_and_predict_random(all_features, label_conditions)
+    #     # for condition in conditions:
+    #     #     print(condition)   
 
    
 

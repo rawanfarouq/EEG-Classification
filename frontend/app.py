@@ -1,8 +1,10 @@
-import webbrowser
+import webbrowser,os
 from threading import Timer
-from flask import Flask, render_template, session,flash
+from flask import Flask, render_template, session,flash,request,jsonify
 from frontend.views import views
 from components.file_reader import bp_file_reader
+from werkzeug.utils import secure_filename
+
 app = Flask(__name__)
 
 app.register_blueprint(bp_file_reader)
@@ -44,6 +46,9 @@ def mat_classification():
      
     return render_template('mat_files_class.html')
 
+@app.route('/predictions')
+def predictions():
+     return render_template('predictions.html')
 
 
 # def open_browser():

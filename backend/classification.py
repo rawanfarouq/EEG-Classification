@@ -900,7 +900,7 @@ def create_cnn_model(input_shape):
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 
-model_directory = 'E:/EEG-Classification/saved_models'
+model_directory = 'C:/Users/user/Desktop/EEG-Classification'
 os.makedirs(model_directory, exist_ok=True)
 model_svc = os.path.join(model_directory, 'svc_model.joblib')
 model_rf = os.path.join(model_directory, 'rf_model.joblib')

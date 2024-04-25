@@ -20,7 +20,7 @@ sys.path.insert(0, backend_dir)
 
 from backend.classification import read_eeg_file, read_edf_eeg, read_mat_eeg, csv_identification,processed_data_keywords,csv_modeling,preprocess_raw_eeg,extract_features_csp,mat_modeling,get_label_text,read_label_conditions
 from backend.classification import csv_svc_model,csv_random_model,csv_logistic_model,csv_knn_model,csv_cnn_model,load_and_predict_svc,load_and_predict_random,load_and_predict_knn,load_and_predict_cnn,load_and_predict_logisitc,csv_features
-
+from backend.features import loadData, features, allfeatures
 
 
 @bp_file_reader.route('/upload', methods=['GET', 'POST'])
@@ -82,6 +82,14 @@ def upload():
                 return render_template('alert.html', message="Unsupported file type", alert_type='danger')
 
         if mat_file_paths:
+            allf = []
+            feat = []
+            for path in mat_file_paths:
+                headers = []
+                d, l = loadData(path)
+                feat, headers = features(d, l)
+                allf.append(pd.DataFrame(feat))
+            allfeatures(allf, headers)
             session['mat_file_paths'] = mat_file_paths
             print("MAT file paths stored in session:", mat_file_paths)
             # Redirect to mat_classification only if mat files are uploaded and no other types are present

@@ -27,12 +27,9 @@ def importfiles(file_paths):
         headers = []
         feat, headers = loadData(path)
         allf.append(pd.DataFrame(feat))
-        #extract_features(d, l)
-    allfeatures(allf, headers, 'featurestesting.csv')
-    #extract_features(allf, headers)
+    extract_features(allf, headers)
 
     #filtereddata = [noiseCancellation(df) for df in subjectdata]
-    #extract(subjectdata, isTime, labels)
 
 def loadData(fileName):
 
@@ -47,27 +44,6 @@ def loadData(fileName):
             return None
         except Exception as e:
             print('Error', f'Error in loading mat file: {str(e)}')
-            return None
-        
-    elif fileName.endswith('edf') or fileName.endswith('edf+'):
-        try:
-            f = pyedflib.EdfReader(fileName)
-            numsignals = f.signals_in_file
-            signalslabels = f.getSignalLabels()
-            samples = f.getNSamples()[0]
-            data = np.zeros((samples, numsignals))
-            for index in range(numsignals):
-                data[:,index] = f.readSignal(index)
-            #fs = f.getSampleFrequency(0)
-            df = pd.DataFrame(data, columns=signalslabels)
-            df.index = range(samples)
-            #noiseCancellation(df)
-            return df
-        except ImportError:
-            print('Library Error', 'pyedflib library is required to load EDF/EDF+ data.')
-            return None
-        except Exception as e:
-            print('Error', f'Error in loading EDF/EDF+ data: {str(e)}')
             return None
         
     else:
@@ -137,7 +113,6 @@ def allfeatures(FS, headers, csv_path):
     dffeatures.to_csv(csvpath, index=False)
     return csvpath
 
-'''
 subbands = [(0.5, 4), (4, 8), (8, 12), (12, 30), (30, 100)]
 def filtering(data, fs, lowcut, highcut, order=5):
     nyquist = 0.5 * fs
@@ -149,15 +124,13 @@ def filtering(data, fs, lowcut, highcut, order=5):
 
 def extract_features(eegData, labels):
     allfeatures(eegData, labels, 'featurestesting.csv')
-    feat = []
-    headers = []
-    
     for band_idx, (lowcut, highcut) in enumerate(subbands, start=1):
+        subfeatures = []
         filtered_data = filtering(eegData, fs=500, lowcut=lowcut, highcut=highcut)
-        subband_features, subband_headers = features(filtered_data, labels)
+        for df in filtered_data:
+            subband_features, subband_headers = features(df, labels)
+            subfeatures.append(pd.DataFrame(subband_features))
         csv_path = f'subband_{band_idx}_features.csv'
-        allfeatures(subband_features, subband_headers, csv_path)
+        allfeatures(subfeatures, subband_headers, csv_path)
     
     return subband_features, subband_headers, csv_path
-
-'''

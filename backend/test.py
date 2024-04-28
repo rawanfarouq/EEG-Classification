@@ -8,12 +8,11 @@ mat = scipy.io.loadmat(r'C:\Users\HP\Downloads\mat_sub-023_ses-03_task_motorimag
 
 eegData = mat['data']
 sample=eegData[:,0,0]
-#print(eegData.shape)
+print(eegData.shape)
 print(sample.size)
 labels =  mat['labels']     #mat.get('labels', None)
-#print(labels.shape)
 channels = eegData[0,:,0]
-#print(channels.size)
+print(channels.size)
 FS=[]
 for i in range(0,99):
     L=[]

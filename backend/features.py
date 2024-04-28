@@ -29,8 +29,6 @@ def importfiles(file_paths):
         allf.append(pd.DataFrame(feat))
     extract_features(allf, headers)
 
-    #filtereddata = [noiseCancellation(df) for df in subjectdata]
-
 def loadData(fileName):
 
     if fileName.endswith('mat'):
@@ -63,43 +61,43 @@ def features(eegData, labels):
             #Time Domain
             min_val = np.min(channeldata)
             max_val = np.max(channeldata)
-            #mean_val = np.mean(channeldata)
-            #rms_val = np.sqrt(np.mean(channeldata**2))
-            #var_val = np.var(channeldata)
-            #std_val = np.std(channeldata)
-            #power_val = np.mean(channeldata**2)
-            #peak_val = np.max(np.abs(channeldata))
-            #p2p_val = np.ptp(channeldata)
-            #crest_factor_val = peak_val / rms_val
-            #skew_val = stats.skew(channeldata)
-            #kurtosis_val = stats.kurtosis(channeldata)
+            mean_val = np.mean(channeldata)
+            rms_val = np.sqrt(np.mean(channeldata**2))
+            var_val = np.var(channeldata)
+            std_val = np.std(channeldata)
+            power_val = np.mean(channeldata**2)
+            peak_val = np.max(np.abs(channeldata))
+            p2p_val = np.ptp(channeldata)
+            crest_factor_val = peak_val / rms_val
+            skew_val = stats.skew(channeldata)
+            kurtosis_val = stats.kurtosis(channeldata)
 
             L.append(min_val)
             L.append(max_val)
-            #L.append(mean_val)
-            #L.append(rms_val)
-            #L.append(var_val)
-            #L.append(std_val)
-            #L.append(power_val)
-            #L.append(peak_val)
-            #L.append(p2p_val)
-            #L.append(crest_factor_val)
-            #L.append(skew_val)
-            #L.append(kurtosis_val)
+            L.append(mean_val)
+            L.append(rms_val)
+            L.append(var_val)
+            L.append(std_val)
+            L.append(power_val)
+            L.append(peak_val)
+            L.append(p2p_val)
+            L.append(crest_factor_val)
+            L.append(skew_val)
+            L.append(kurtosis_val)
 
             if(sample == 0):
                 headers.append(f'Channel_{channel+1}_min')
                 headers.append(f'Channel_{channel+1}_max')
-                #headers.append(f'Channel_{channel+1}_mean')
-                #headers.append(f'Channel_{channel+1}_rms')
-                #headers.append(f'Channel_{channel+1}_var')
-                #headers.append(f'Channel_{channel+1}_std')
-                #headers.append(f'Channel_{channel+1}_power')
-                #headers.append(f'Channel_{channel+1}_peak')
-                #headers.append(f'Channel_{channel+1}_p2p')
-                #headers.append(f'Channel_{channel+1}_crestfactor')
-                #headers.append(f'Channel_{channel+1}_skew')
-                #headers.append(f'Channel_{channel+1}_kurtosis')
+                headers.append(f'Channel_{channel+1}_mean')
+                headers.append(f'Channel_{channel+1}_rms')
+                headers.append(f'Channel_{channel+1}_var')
+                headers.append(f'Channel_{channel+1}_std')
+                headers.append(f'Channel_{channel+1}_power')
+                headers.append(f'Channel_{channel+1}_peak')
+                headers.append(f'Channel_{channel+1}_p2p')
+                headers.append(f'Channel_{channel+1}_crestfactor')
+                headers.append(f'Channel_{channel+1}_skew')
+                headers.append(f'Channel_{channel+1}_kurtosis')
         L.append(labels[0,sample])
         FS.append(L)
     headers.append('Label')
@@ -123,14 +121,16 @@ def filtering(data, fs, lowcut, highcut, order=5):
     return filtered_data
 
 def extract_features(eegData, labels):
-    allfeatures(eegData, labels, 'featurestesting.csv')
+    allfeatures(eegData, labels, 'allfeatures.csv')
+    '''
     for band_idx, (lowcut, highcut) in enumerate(subbands, start=1):
         subfeatures = []
-        filtered_data = filtering(eegData, fs=500, lowcut=lowcut, highcut=highcut)
-        for df in filtered_data:
-            subband_features, subband_headers = features(df, labels)
+        for df in eegData:
+            filtered_data = filtering(df, fs=500, lowcut=lowcut, highcut=highcut)
+            subband_features, subband_headers = features(filtered_data, labels)
             subfeatures.append(pd.DataFrame(subband_features))
         csv_path = f'subband_{band_idx}_features.csv'
         allfeatures(subfeatures, subband_headers, csv_path)
     
     return subband_features, subband_headers, csv_path
+    '''

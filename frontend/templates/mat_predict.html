@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mat Predict</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            max-width: 400px;
+            margin-bottom: 30px;
+        }
+        .alert {
+            margin-top: 20px;
+        }
+        .instructions {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+        .upload-form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .upload-form h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+       
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="upload-form">
+            <h1 id="workflowTitle">EEG Data Prediction Workflow</h1>
+            <p class="instructions" id="workflowInstructions">Upload your raw EEG data files and click "Preprocess" to start the prediction workflow.</p>
+            <form id="uploadForm" action="/mat_predict" method="POST" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="file_path_upload">Upload your EEG file or folder:</label>
+                    <input type="file" class="form-control-file" id="file_path_upload" name="file_path_upload" webkitdirectory directory multiple required>
+                </div>
+                <button type="submit" class="btn btn-success btn-block">Upload</button>
+            </form>
+        </div>
+        <div id="alertBox"></div>
+        <div id="preprocessingStepsContainer" class="preprocessing-steps" style="display:none;">
+            <h2>Preprocessing Steps:</h2>
+            <ul id="preprocessingStepsList"></ul>
+        </div>
+        <button id="extractFeaturesButton" class="btn btn-primary mt-3" style="display:none;">Extract Features</button>
+        <div id="featuresMessage" class="mt-3"></div>
+        <button id="predictButton" class="btn btn-primary mt-3" style="display:none;">Prediction</button>
+        <div id="predictionMessage" class="mt-3"></div>
+
+    </div>
+
+    
+
+   <script>
+    var preprocessButtonClicked = false; // Flag to track button state
+    var preprocessingStepsFetched = false; // Flag to track whether preprocessing steps are fetched
+    var extractFeaturesFetched = false; // Flag to track whether features are fetched
+
+    document.addEventListener('DOMContentLoaded', (event) => {
+    var urlParams = new URLSearchParams(window.location.search);
+    var model = urlParams.get('model');
+    if (model) {
+        // Store the model name in session or local storage for later use in prediction
+        sessionStorage.setItem('selectedModelName', model);
+    }
+});
+
+    document.getElementById('uploadForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+        var formData = new FormData(this);
+
+        fetch('/mat_predict', {
+            method: 'POST',
+            body: formData
+        }).then(response => response.json()).then(data => {
+            if (data.error) {
+                document.getElementById('alertBox').innerHTML = `<div class="alert alert-danger" role="alert">${data.error}</div>`;
+            } else {
+                // Create a Bootstrap alert for success message
+                var alertSuccessHTML = `<div class="alert alert-success alert-dismissible fade show" role="alert">
+                                            All files successfully read
+                                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                                <span aria-hidden="true">&times;</span>
+                                            </button>
+                                        </div>`;
+
+                // Insert the Bootstrap alert into the alertBox
+                document.getElementById('alertBox').innerHTML = alertSuccessHTML;
+
+                // Add the Preprocess button to alertBox
+                var preprocessButtonHTML = `<button id="preprocessButton" class="btn btn-primary mt-3">View Preprocess</button>`;
+                document.getElementById('alertBox').insertAdjacentHTML('beforeend', preprocessButtonHTML);
+
+                // Add event listener to the Preprocess button
+                document.getElementById('preprocessButton').addEventListener('click', function() {
+                    preprocessButtonClicked = !preprocessButtonClicked; // Toggle button state
+
+                    if (preprocessButtonClicked) {
+                        if (!preprocessingStepsFetched) { // Fetch preprocessing steps only if not fetched before
+                            // Call the preprocess function on the backend
+                            fetch('/mat_preprocess_predict', {
+                                method: 'POST'
+                                // No need to send the files again, they're already on the server and in the session
+                            }).then(response => response.json()).then(data => {
+                                if (data.error) {
+                                    document.getElementById('alertBox').innerHTML = `<div class="alert alert-danger" role="alert">${data.error}</div>`;
+                                } else {
+                                    // Display preprocessing steps
+                                    var stepsContainer = document.getElementById('preprocessingStepsContainer');
+                                    var stepsList = document.getElementById('preprocessingStepsList');
+                                    stepsContainer.style.display = 'block';
+                                    stepsList.innerHTML = ''; // Clear any previous list items
+
+                                    data.preprocessing_steps_predict.forEach(function(step) {
+                                        var listItem = document.createElement('li');
+                                        listItem.innerText = step;
+                                        stepsList.appendChild(listItem);
+                                    });
+
+                                    // Show Extract Features button
+                                    var extractFeaturesButton = document.getElementById('extractFeaturesButton');
+                                    extractFeaturesButton.style.display = 'block';
+                                }
+                            }).catch(error => {
+                                console.error('Error:', error);
+                            });
+
+                            preprocessingStepsFetched = true; // Set flag to indicate preprocessing steps are fetched
+                        } else {
+                            // Show preprocessing steps if already fetched
+                            document.getElementById('preprocessingStepsContainer').style.display = 'block';
+                        }
+
+                        // Change button text to "Hide Preprocess"
+                        this.innerText = 'Hide Preprocess';
+                    } else {
+                        document.getElementById('preprocessingStepsContainer').style.display = 'none';
+
+                        this.innerText = 'View Preprocess';
+                    }
+                });
+
+                // Add event listener to the Extract Features button
+                var extractFeaturesButton = document.getElementById('extractFeaturesButton');
+                extractFeaturesButton.addEventListener('click', function() {
+                    if (!extractFeaturesFetched) { // Fetch features only if not fetched before
+                        // Call the backend function to extract features
+                        fetch('/extract-csp-features_predict', {
+                            method: 'POST'
+                        }).then(response => response.json()).then(data => {
+                            if (data.error) {
+                                document.getElementById('featuresMessage').innerHTML = `<div class="alert alert-danger" role="alert">${data.error}</div>`;
+                            } else {
+                                // Display the features message
+                                document.getElementById('featuresMessage').innerHTML = `<div class="alert alert-info" role="alert">${data.message}</div>`;
+                                // Show Predict button
+                                var predictButton = document.getElementById('predictButton');
+                                predictButton.style.display = 'block';
+                            }
+                        }).catch(error => {
+                            console.error('Error:', error);
+                            document.getElementById('featuresMessage').innerHTML = `<div class="alert alert-danger" role="alert">An error occurred while extracting features.</div>`;
+                        });
+
+                        extractFeaturesFetched = true; // Set flag to indicate features are fetched
+                    }
+
+                    // Toggle visibility of features message
+                    var featuresMessage = document.getElementById('featuresMessage');
+                    featuresMessage.style.display = featuresMessage.style.display === 'none' ? 'block' : 'none';
+
+                    // Change button text based on visibility
+                    this.innerText = this.innerText === 'View Extract Features' ? 'Hide Extract Features' : 'View Extract Features';
+                });
+
+                // Add event listener to the Predict button
+                var predictButton = document.getElementById('predictButton');
+                predictButton.addEventListener('click', function() {
+                    var selectedModelName = sessionStorage.getItem('selectedModelName');
+                if (!selectedModelName) {
+                    document.getElementById('predictionMessage').innerHTML = `<div class="alert alert-danger" role="alert">No model selected.</div>`;
+                    return;
+                }
+                fetch('/perform_mat_prediction', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ model_name: selectedModelName })
+                }).then(function(response) {
+                    return response.json();
+                }).then(function(data) {
+                    if (data.error) {
+                        document.getElementById('predictionMessage').innerHTML = `<div class="alert alert-danger" role="alert">${data.error}</div>`;
+                    } else {
+                            var subjects = {};
+
+            // Group predictions by subject identifier (sub)
+            data.predict.forEach(function(subjectPrediction) {
+                var identifier = subjectPrediction['Subject Identifier'];
+                var [sub, ses] = identifier.split('_');
+                if (!subjects[sub]) {
+                    subjects[sub] = { sessions: {} };
+                }
+                subjects[sub].sessions[ses] = subjectPrediction;
+            });
+
+            // Generate the HTML with a card per subject and tabs for each session
+            var predictionHTML = '';
+            Object.keys(subjects).forEach(function(sub) {
+                predictionHTML += `<div class="card text-center mb-3">
+                    <div class="card-header">
+                        <ul class="nav nav-tabs card-header-tabs" role="tablist">`;
+
+                var sessions = subjects[sub].sessions;
+                var sessionKeys = Object.keys(sessions);
+                sessionKeys.forEach(function(ses, index) {
+                    predictionHTML += `<li class="nav-item">
+                        <a class="nav-link ${index === 0 ? 'active' : ''}" id="tab-${sub}-${ses}" data-toggle="tab" href="#panel-${sub}-${ses}" role="tab">${ses}</a>
+                    </li>`;
+                });
+
+                predictionHTML += `</ul>
+                    </div>
+                    <div class="card-body tab-content">`;
+
+                sessionKeys.forEach(function(ses, index) {
+                    var sessionInfo = sessions[ses];
+                    var predictions = sessionInfo['Models'][0]['Predictions'];
+                    var model_name = sessionInfo['Models'][0]['Model Name'];
+
+                    // Find the corresponding label message
+                    var labelsForSubjectString = data.label_messages.find(function(labelMessage) {
+                        return labelMessage[0].includes(sessionInfo['Subject Identifier']);
+                    });
+
+                    // Extract labels array
+                    var labels = [];
+                    if (labelsForSubjectString) {
+                        try {
+                            var labelsArrayString = labelsForSubjectString[0].split(": ")[1];
+                            labels = JSON.parse(labelsArrayString.replace(/'/g, "\""));
+                        } catch (e) {
+                            // Handle error in label parsing
+                            console.error('Error parsing labels:', e.message);
+                        }
+                    }
+
+                    predictionHTML += `<div class="tab-pane fade ${index === 0 ? 'show active' : ''}" id="panel-${sub}-${ses}" role="tabpanel">`;
+                    predictionHTML += `<h5 class="card-title">${model_name} Predictions for ${sub} - ${ses}</h5>`;
+                    predictionHTML += `<ul class="list-group">`;
+
+                    predictions.forEach(function(prediction, index) {
+                        var trialPrediction = prediction.split(': ')[1];
+                        var isCorrect = labels && labels[index] === trialPrediction;
+                        var checkMark = isCorrect ? '<span class="text-success">&#10004;</span>' : '<span class="text-danger">&#10008;</span>';
+                        predictionHTML += `<li class="list-group-item">${trialPrediction} ${checkMark}</li>`;
+                    });
+
+                    predictionHTML += `</ul></div>`;
+                });
+
+                predictionHTML += `</div></div>`;
+            });
+                        
+                            // Set the innerHTML of the predictionMessage to include all subjects' predictions
+                            document.getElementById('predictionMessage').innerHTML = predictionHTML;
+                        }
+                }).catch(function(error) {
+                    console.error('Error:', error);
+                    document.getElementById('predictionMessage').innerHTML = `<div class="alert alert-danger" role="alert">An error occurred while making predictions.</div>`;
+                });
+            });
+                            // Hide the upload form
+                        document.getElementById('uploadForm').style.display = 'none';
+                        }
+                    }).catch(error => {
+                        document.getElementById('alertBox').innerHTML = `<div class="alert alert-danger" role="alert">${error}</div>`;
+                    });
+                });
+
+    
+</script>
+
+   <!-- Include Bootstrap's JavaScript -->
+   <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/popper.js@1.7.12/umd/popper.min.js"></script>
+   <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+   <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+
+
+</body>
+</html>

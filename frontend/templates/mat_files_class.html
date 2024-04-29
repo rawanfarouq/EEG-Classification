@@ -101,6 +101,22 @@
 
     <button id="toggleButton" class="btn btn-primary my-2" onclick="toggleStepsContainer()">View Process Data</button>
     <button id="extractFeaturesButton" class="btn btn-success my-2" onclick="extractFeatures()">Extract CSP Features</button>
+   
+    <button id="toggleAccuracyButton" class="btn btn-info my-2" onclick="toggleAccuracyContainer()" style="display: none;">Hide Accuracy Results</button>
+    <div id="modelSelectionContainer" style="display: none; margin-top: 10px;">
+        <label for="modelSelect">Choose a model:</label>
+        <select id="modelSelect" class="form-control">
+            <option value="">Select Model</option>
+            <option value="svc">SVC Model</option>
+            <option value="random">Random Forest Model</option>
+            <option value="logistic">Logistic Regression Model</option>
+            <option value="knn">KNN Model</option>
+            <option value="cnn">CNN Model</option>
+        </select>
+        <button id="fetchAccuracyButton" class="btn btn-info my-2" onclick="fetchModelAccuracy()">Get Accuracy</button>
+    </div>
+    <button id="predictButton" class="btn btn-warning my-2" onclick="redirectToPredictPage()" style="display: none;">Predict</button>
+
 
 <div id="stepsContainer">
     <h2>Preprocessing Steps:</h2>
@@ -221,9 +237,11 @@ function fetchCSPFeatures() {
         }
         return response.json();
     }).then(data => {
+        console.log("entered fetch csp")
         if (data.message) {
+            console.log("entered if fetch csp")
             displaySuccessMessage(data.message); // Display the message from the server
-            performMatModeling(); // Call modeling after features are extracted
+            document.getElementById('modelSelectionContainer').style.display = 'block';
         } else {
             displayErrorMessage('No message received from server.');
         }
@@ -233,28 +251,7 @@ function fetchCSPFeatures() {
     });
 }
 
-function performMatModeling() {
-    displayLoadingAccuracy();
 
-    fetch('{{ url_for("file_reader.perform_mat_modeling") }}', {
-        method: 'POST',
-    }).then(response => {
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-    }).then(data => {
-        if (data.accuracy) {
-            displayAccuracyResults(data.accuracy);
-            modelingPerformed = true; // Update the flag
-        } else {
-            displayErrorMessage('No accuracy results received from server.');
-        }
-    }).catch(error => {
-        console.error('Error:', error);
-        displayErrorMessage('Error performing modeling.');
-    });
-}
 
 function displayLoadingAccuracy() {
     var accuracyContainer = document.getElementById('accuracyContainer');
@@ -270,14 +267,26 @@ function displayLoadingAccuracy() {
 function displayAccuracyResults(accuracyData) {
     var accuracyContainer = document.getElementById('accuracyContainer');
     var accuracyList = document.getElementById('accuracyList');
-    accuracyContainer.style.display = 'block';
-    accuracyList.innerHTML = ''; // Clear previous results
+    var toggleAccuracyButton = document.getElementById('toggleAccuracyButton');
 
+    // Clear previous results and set the display style
+    accuracyList.innerHTML = '';
+    accuracyContainer.style.display = 'block';
+    toggleAccuracyButton.style.display = 'block';
+    toggleAccuracyButton.textContent = 'Hide Accuracy Results';
+
+    // Create a list item for each accuracy message and append it to the list
     accuracyData.forEach(function(accuracyMessage) {
         var li = document.createElement('li');
-        li.textContent = accuracyMessage;
-        accuracyList.appendChild(li);
+        li.className = 'list-group-item'; // Use Bootstrap class for styling
+        
+        // Convert the accuracy message into a formatted HTML string
+        var formattedMessage = accuracyMessage.replace(/, /g, '<br>'); // Replace commas with line breaks
+        li.innerHTML = formattedMessage; // Set the HTML content of the list item
+        accuracyList.appendChild(li); // Append the list item to the list
     });
+    document.getElementById('predictButton').style.display = 'block';
+
 }
 
 
@@ -306,6 +315,75 @@ function displayAccuracyResults(accuracyData) {
         var errorMessage = document.getElementById('successMessage');
         errorMessage.innerHTML = '<div class="mt-3 p-3 bg-danger text-white rounded">' + message + '</div>';
     }
+
+    function toggleAccuracyContainer() {
+        var accuracyContainer = document.getElementById('accuracyContainer');
+        var toggleAccuracyButton = document.getElementById('toggleAccuracyButton');
+
+        // Check the current display state and toggle it
+        if (accuracyContainer.style.display === 'none' || accuracyContainer.style.display === '') {
+            accuracyContainer.style.display = 'block';
+            toggleAccuracyButton.textContent = 'Hide Accuracy Results';
+        } else {
+            accuracyContainer.style.display = 'none';
+            toggleAccuracyButton.textContent = 'View Accuracy Results';
+        }
+    }
+
+    function fetchModelAccuracy() {
+    var modelSelect = document.getElementById('modelSelect');
+    var model = modelSelect.value;
+    var url = '';
+
+    
+    if (!model) {
+        displayErrorMessage('Please select a model.');
+        return;
+    }
+    // Determine which URL to use based on the selected model
+    if (model === 'svc') {
+        url = '{{ url_for("file_reader.perform_mat_modeling_svc") }}';
+    } else if (model === 'random') {
+        url = '{{ url_for("file_reader.perform_mat_modeling_random") }}';
+    } else if (model === 'logistic') {
+        url = '{{ url_for("file_reader.perform_mat_modeling_logistic") }}';
+    }else if (model === 'knn') {
+        url = '{{ url_for("file_reader.perform_mat_modeling_knn") }}';
+    }else if (model === 'cnn') {
+        url = '{{ url_for("file_reader.perform_mat_modeling_cnn") }}';
+    }
+    
+
+    // Fetch the accuracy results for the selected model
+    fetch(url, {
+        method: 'POST',
+    }).then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    }).then(data => {
+        if (data.accuracy) {
+            displayAccuracyResults(data.accuracy);
+        } else {
+            displayErrorMessage('No accuracy results received from server.');
+        }
+    }).catch(error => {
+        console.error('Error:', error);
+        displayErrorMessage('Error fetching accuracy results.');
+    });
+}
+
+function redirectToPredictPage() {
+    var modelSelect = document.getElementById('modelSelect');
+    var selectedModel = modelSelect.value;
+    if (selectedModel) {
+        window.location.href = '{{ url_for("mat_predict") }}?model=' + encodeURIComponent(selectedModel);
+    } else {
+        // Handle the case where no model is selected before redirecting
+        displayErrorMessage('Please select a model.');
+    }
+}
 
    
 </script>

@@ -24,11 +24,11 @@ def files(fileName, isTime):
     subjectfiles = glob.glob(subid + '*')
     subjectdata = []
     for file in subjectfiles:
-        df = loadData(file)
+        df, labels = loadData(file)
         subjectdata.append(df)
 
     #filtereddata = [noiseCancellation(df) for df in subjectdata]
-    extract(subjectdata, isTime)
+    extract(subjectdata, isTime, labels)
 
 
 def loadData(fileName):
@@ -69,12 +69,10 @@ def loadData(fileName):
 
             info = mne.create_info(ch_names=channelnames,sfreq=500,ch_types=channeltypes)
             raw = mne.io.RawArray(eegData, info=info)
-            labels = mat.get('labels', None)
-            if labels is not None:
-                labels = labels.flatten()
+            labels = mat['labels']
             df = pd.DataFrame(eegData.T)
             #noiseCancellation(df)
-            return df
+            return df, labels
         except ImportError:
             print('Library Error', 'scipy is required to load MAT data.')
             return None
@@ -127,6 +125,7 @@ def loadData(fileName):
     '''
 def noiseCancellation(df):
     filtered_df = df.copy()
+    return filtered_df
     '''
     if not df.empty:
         window_size = min(self.window_size, len(df))
@@ -139,8 +138,6 @@ def noiseCancellation(df):
     '''
     #threading.Thread(target=plotChannels, args=(filtered_df,)).start()
     #channelextraction(filtered_df)
-    return filtered_df
-    pass
 
 '''
 def plotChannels(df):
@@ -200,14 +197,14 @@ def plot(self, dfs, filtereds):
     pass
 '''
     
-def extract(dfs, isTime):
+def extract(dfs, isTime, labels):
     allfeatures = []
     
     for df in dfs:
         if(isTime):
-            channelfeatures, featuresheader = channelextractiontime(df)
+            channelfeatures, featuresheader = channelextractiontime(df, labels)
         else:
-            channelfeatures, featuresheader = channelextractionfreq(df)
+            channelfeatures, featuresheader = channelextractionfreq(df, labels)
         #channelfeatures, featuresheader = channelextraction(df)
         allfeatures.append(pd.DataFrame(data=channelfeatures, columns=featuresheader))
 
@@ -231,12 +228,12 @@ def extract(dfs, isTime):
     #print("Zero-Crossing Rate:", zcr)
     #print("Standard Deviation:", std)
 
-def channelextraction(df):
+def channelextraction(df, labels):
     features = []
 
     featuresheader = ['Channel', 'Minimum', 'Maximum', 'Mean', 'RMS', 'Variance', 'Standard Deviation',
                         'Power', 'Peak', 'Peak-to-Peak', 'Crest Factor', 'Skew', 'Kurtosis',
-                        'Max_F', 'Sum_F', 'Mean_F', 'Variance_F', 'Peak_F', 'Skew_F', 'Kurtosis_F']
+                        'Max_F', 'Sum_F', 'Mean_F', 'Variance_F', 'Peak_F', 'Skew_F', 'Kurtosis_F', 'Label']
         
     for channel in df.columns: 
         channeldata = df[channel]
@@ -268,7 +265,7 @@ def channelextraction(df):
             
         features.append([channel, min_val, max_val, mean_val, rms_val, var_val, std_val, power_val, 
                         peak_val, p2p_val, crest_factor_val, skew_val, kurtosis_val, maxf_val, 
-                        sumf_val, meanf_val, varf_val, peakf_val, skewf_val, kurtosisf_val])
+                        sumf_val, meanf_val, varf_val, peakf_val, skewf_val, kurtosisf_val, labels])
             
     #dffeatures = pd.DataFrame(data=features, columns=featuresheader)
     #current_dir = os.path.dirname(os.path.realpath(__file__))
@@ -277,11 +274,11 @@ def channelextraction(df):
     #return csvpath
     return features, featuresheader
 
-def channelextractiontime(df):
+def channelextractiontime(df, labels):
     features = []
 
     featuresheader = ['Channel', 'Minimum', 'Maximum', 'Mean', 'RMS', 'Variance', 'Standard Deviation',
-                        'Power', 'Peak', 'Peak-to-Peak', 'Crest Factor', 'Skew', 'Kurtosis']
+                        'Power', 'Peak', 'Peak-to-Peak', 'Crest Factor', 'Skew', 'Kurtosis', 'Label']
         
     for channel in df.columns: 
         channeldata = df[channel]
@@ -301,14 +298,14 @@ def channelextractiontime(df):
         kurtosis_val = stats.kurtosis(channeldata)
             
         features.append([channel, min_val, max_val, mean_val, rms_val, var_val, std_val, power_val, 
-                        peak_val, p2p_val, crest_factor_val, skew_val, kurtosis_val])
+                        peak_val, p2p_val, crest_factor_val, skew_val, kurtosis_val, labels])
         
     return features, featuresheader
 
-def channelextractionfreq(df):
+def channelextractionfreq(df, labels):
     features = []
 
-    featuresheader = ['Channel', 'Maximum', 'Sum', 'Mean', 'Variance', 'Peak', 'Skew', 'Kurtosis']
+    featuresheader = ['Channel', 'Maximum', 'Sum', 'Mean', 'Variance', 'Peak', 'Skew', 'Kurtosis', 'Label']
         
     for channel in df.columns: 
         channeldata = df[channel]
@@ -324,7 +321,7 @@ def channelextractionfreq(df):
         skewf_val = stats.skew(S)
         kurtosisf_val = stats.kurtosis(S)
             
-        features.append([channel, maxf_val, 
-                        sumf_val, meanf_val, varf_val, peakf_val, skewf_val, kurtosisf_val])
+        features.append([channel, maxf_val, sumf_val, meanf_val, 
+                         varf_val, peakf_val, skewf_val, kurtosisf_val, labels])
         
     return features, featuresheader

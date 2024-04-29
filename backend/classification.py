@@ -14,8 +14,8 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
-from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
-from sklearn.metrics import classification_report, accuracy_score,precision_score,f1_score,recall_score
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold, cross_validate
+from sklearn.metrics import classification_report, accuracy_score,precision_score,f1_score,recall_score,make_scorer
 from sklearn.preprocessing import StandardScaler, LabelEncoder, LabelBinarizer
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.decomposition import PCA
@@ -43,12 +43,12 @@ from mpl_toolkits.mplot3d import Axes3D
 from nilearn import plotting
 import plotly.graph_objects as go
 import cProfile
-from keras.models import Sequential
+from keras.models import Sequential, load_model
 from keras.optimizers import Adam
 from keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout, Conv2D, MaxPooling2D, BatchNormalization
 from keras.utils import to_categorical
 from scikeras.wrappers import KerasClassifier
-from collections import defaultdict
+from collections import defaultdict, Counter
 from time import sleep
 from joblib import Parallel,delayed
 import tensorflow as tf
@@ -57,11 +57,11 @@ from joblib import dump, load
 import stat
 
 downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-dataverse_files_folder = os.path.join(downloads_folder, "archive (3)")  # Combine with the folder name
+dataverse_files_folder = os.path.join(downloads_folder, "mat2")  # Combine with the folder name
 
 # Use glob to get a list of file paths matching a specific pattern
 file_paths = glob(os.path.join(dataverse_files_folder, '*.*'))  # Getting all files with any extension 
-conditions_file = os.path.join(downloads_folder, 'label_conditions.txt')
+label_conditions_path = os.path.join(downloads_folder, 'label_conditions.txt')
 
 
 
@@ -70,7 +70,6 @@ all_features = pd.DataFrame()
 labels_list=[]
 label_encoder = LabelEncoder()
 progress_updates=[]
-preprocessing_steps=set()
 all_bads = set()
 accuracy_dict_rnd = defaultdict(list)
 accuracy_dict_svc = defaultdict(list)
@@ -89,6 +88,11 @@ labels=[]
 features_df=pd.DataFrame()
 features_message=[]
 accuracy_mat=[]
+accuracy_mat_svc=[]
+accuracy_mat_random=[]
+accuracy_mat_logistic=[]
+accuracy_mat_knn=[]
+accuracy_mat_cnn=[]
 label_to_condition_mapping = {}
 label_conditions={}
 accuracy_svc_csv={}
@@ -106,8 +110,34 @@ model_random_csv_prediction={}
 model_logistic_csv_prediction={}
 model_knn_csv_prediction={}
 model_cnn_csv_prediction={}
+processed_data_keywords = [
+    'feature', 'power', 'mean', 'stddev', 'variance','peak','crestfactor',
+    'entropy', 'fft', 'frequency', 'band', 'delta', 
+    'theta', 'alpha', 'beta', 'gamma','max','min','avgmax','avgmin','skew','kurt',
+    'median','var','energy','sigma','coefficient','D0','D1','D2','KFD','PFD','HFD','LZC',
+    'CTM','AMI','RR','determinant','det','Lam','avg','average','Lmax','Vmin','TT','divergence',
+    'time frequency distributions','TFD','fast fourier transformation','EM',
+    'eigenvector methods','WT','wavelet transform','correlate','rms','p2p'
+]
 
+model_directory = 'saved_models'
+os.makedirs(model_directory, exist_ok=True)
+model_svc = os.path.join(model_directory, 'svc_model.joblib')
+model_rf = os.path.join(model_directory, 'rf_model.joblib')
+model_lr = os.path.join(model_directory, 'lr_model.joblib')
+model_knn = os.path.join(model_directory, 'knn_model.joblib')
+model_cnn = os.path.join(model_directory, 'cnn_model.joblib')
+encoder_path = os.path.join(model_directory, 'label_encoder.joblib')
+y_original = None # original labels: the last column
+model_directory_mat = 'saved_models_mat'
+os.makedirs(model_directory_mat, exist_ok=True)
 
+label_descriptions = {
+    1: 'moving left hand',
+    2: 'moving right hand'
+}
+trial_labels_sentences_array = []
+labels_array = [] 
 
 # for file_path in file_paths:
 #     filename = os.path.basename(file_path)  # Extract the filename from the file path
@@ -133,9 +163,9 @@ def read_eeg_file(file_path):
         print("DataFrame shape:" ,df.shape)
         # unique_prefixes = get_unique_prefixes(df.columns)
         # print("Unique prefixes:", unique_prefixes)
-
+       
         for col in df.columns:
-            if col.lower() in ['label', 'labels']:
+            if col.lower() in ['label', 'labels']: 
                 continue  # Skip the label columns
             if df[col].apply(lambda x: not pd.api.types.is_number(x)).any():
                 print(f"Column '{col}' contains non-numeric values and will be removed.")
@@ -147,7 +177,7 @@ def read_eeg_file(file_path):
 
         if check_processed_from_columns(df, processed_data_keywords):
             print("The data appears to be processed.")
-            return df, None  # Return the DataFrame and None for sfreq
+            return df, None # Return the DataFrame and None for sfreq
 
         # Check if the first column is non-numeric and should be used as the index
         if not np.issubdtype(df.iloc[:, 0].dtype, np.number):
@@ -186,6 +216,26 @@ def read_eeg_file(file_path):
     except Exception as e:
         print(f"An error occurred while processing {file_path}: {e}")
         return None, None
+    
+
+def is_data_clean(df):
+    # Check for NaN values in the data
+    if df.isnull().any().any():
+        print("Data contains NaN values.")
+        return False
+
+    # Check for duplicate rows
+    if df.duplicated().any():
+        print("Data contains duplicate rows.")
+        return False
+
+    # Check for flatline signals by looking for columns with no variance
+    if (df.var() == 0).any():
+        print("Data contains flatline signals.")
+        return False
+    
+    # If all checks pass, the data is considered clean
+    return True
 
 
 def read_edf_eeg(file_path):
@@ -220,6 +270,28 @@ def plot_raw_eeg(raw, title='EEG Data', picks=None, separate_channels=True):
     # Plot the data
     raw.plot(title=title, scalings=scalings, show=True, block=True)
 
+
+
+def is_mat_data_clean(eeg_data, sfreq):
+    # Check for NaN values in the data
+    if np.isnan(eeg_data).any():
+        print("EEG data contains NaN values.")
+        return False
+
+    # Check for duplicate rows (trials)
+    if np.array_equal(eeg_data, np.roll(eeg_data, 1, axis=0)):
+        print("EEG data contains duplicate trials.")
+        return False
+
+    # Check for flatline signals by looking for columns with no variance
+    if np.var(eeg_data, axis=1).min() == 0:  # axis=1 to check variance across time
+        print("EEG data contains flatline channels.")
+        return False
+
+
+    # If all checks pass, the EEG data is considered clean
+    return True
+
 def read_mat_eeg(file_path):
     try:
         # Load MATLAB file
@@ -227,6 +299,8 @@ def read_mat_eeg(file_path):
 
         # Access the EEG data under the 'data' key
         eeg_data = mat['data']
+        # if not is_mat_data_clean(eeg_data,250):
+        #     print("The EEG data is not clean. Additional preprocessing may be required.")
 
         # Check the shape of the data
         if len(eeg_data.shape) == 3:
@@ -251,7 +325,7 @@ def read_mat_eeg(file_path):
 
         # Create RawArray
         raw = mne.io.RawArray(eeg_data, info=info)
-        
+     
         # Extract labels if 'labels' key exists
         if 'labels' in mat:
             labels = mat['labels'].flatten()  # Ensure it is a 1D array
@@ -328,19 +402,19 @@ def visualize_3d_brain_model(raw):
 
     return fig
 
-def add_preprocessing_step(step_description):
+def add_preprocessing_step(step_description, preprocessing_steps):
     preprocessing_steps.add(step_description)
 
-    
+def preprocess_channel_data(channel_data, sfreq, l_freq_hp, h_freq_lp, preprocessing_steps):
 
-def preprocess_channel_data(channel_data, sfreq, l_freq_hp, h_freq_lp):
     channel_data = filter_data(channel_data, sfreq, l_freq=l_freq_hp, h_freq=h_freq_lp, verbose=False)
-    add_preprocessing_step(f"High-pass filtered at {l_freq_hp}Hz and low-pass filtered at {h_freq_lp}Hz with sample frequency {sfreq}Hz.")
+    add_preprocessing_step(f"High-pass filtered at {l_freq_hp}Hz and low-pass filtered at {h_freq_lp}Hz with sample frequency {sfreq}Hz.", preprocessing_steps)
     return channel_data
 
 
 
-def preprocess_raw_eeg(raw, sfreq,session):
+def preprocess_raw_eeg(raw, sfreq,session_name):
+    preprocessing_steps = set()
 
     channel_mapping = {'EEG 0': 'Fp1','EEG 1': 'Fp2','EEG 2': 'F7','EEG 3': 'F3',
                      'EEG 4': 'Fz','EEG 5': 'F4', 'EEG 6': 'F8', 'EEG 7': 'FC5','EEG 8': 'FC1',
@@ -360,7 +434,7 @@ def preprocess_raw_eeg(raw, sfreq,session):
     ica = ICA(n_components=10, random_state=97, max_iter=800)
     ica.fit(raw)
     raw = ica.apply(raw)
-    add_preprocessing_step("Applied ICA for artifact removal.")
+    add_preprocessing_step("Applied ICA for artifact removal.", preprocessing_steps)
 
     # Instantiate NoisyChannels with the filtered raw data.
     noisy_detector = NoisyChannels(raw)
@@ -378,7 +452,7 @@ def preprocess_raw_eeg(raw, sfreq,session):
     # Interpolate bad channels using good ones.
     if bads:
         raw.drop_channels(bads)
-        add_preprocessing_step(f"Interpolated bad channels for {session}: {bads}")
+        add_preprocessing_step(f"Interpolated bad channels for {session_name}: {bads}", preprocessing_steps)
 
 
     # Extract the data for further processing if needed.
@@ -386,22 +460,24 @@ def preprocess_raw_eeg(raw, sfreq,session):
     preprocessed_data = np.empty(eeg_data.shape)
 
     for i, channel in enumerate(eeg_data):
-        preprocessed_data[i] = preprocess_channel_data(channel, sfreq, l_freq_hp=0.5, h_freq_lp=60.0)
+        preprocessed_data[i] = preprocess_channel_data(channel, sfreq, l_freq_hp=0.5, h_freq_lp=60.0, preprocessing_steps=preprocessing_steps)
 
     # Create an MNE RawArray object with the preprocessed data.
     ch_names = raw.info['ch_names']
     info = create_info(ch_names=ch_names, sfreq=sfreq, ch_types='eeg')
     preprocessed_raw = RawArray(preprocessed_data, info)
-    
-
 
     return preprocessed_raw, list(preprocessing_steps)
+
+
 
 def extract_features_from_channel(channel_data, sfreq, epoch_length=1.0):
     # Assuming channel_data is a 1D numpy array
     n_samples = channel_data.shape[0]
     n_epochs = int(n_samples / (epoch_length * sfreq))
     features_list = []
+    diffs = np.abs(np.diff(channel_data))
+
 
     for i in range(n_epochs):
         start_sample = int(i * epoch_length * sfreq)
@@ -417,23 +493,6 @@ def extract_features_from_channel(channel_data, sfreq, epoch_length=1.0):
         average_val = np.mean(epoch) 
        
 
-        # # Frequency-domain features
-        # fft_vals = rfft(epoch)
-        # psd_vals = np.abs(fft_vals) ** 2
-        # freq_res = np.fft.rfftfreq(n=len(epoch), d=1.0 / sfreq)
-        
-
-        # # Welch's method to estimate power spectral density
-        # f, psd_welch = welch(epoch, sfreq)
-
-        # Define frequency bands of interest (bands)
-        bands = {
-            'delta': (0.5, 4),
-            'theta': (4, 8),
-            'alpha': (8, 12),
-            'beta': (12, 30),
-            'gamma': (30, 45)
-        }
         
         # Initialize a dictionary to hold features for the current epoch
         features = {
@@ -443,24 +502,8 @@ def extract_features_from_channel(channel_data, sfreq, epoch_length=1.0):
             'rms': rms_val,
             'variance': variance_val,
            'peak_to_peak': np.ptp(epoch),
-            # 'zero_crossing_rate': ((epoch[:-1] * epoch[1:]) < 0).sum() / (epoch_length * sfreq),
-            # 'signal_magnitude_area': np.trapz(np.abs(epoch), dx=1/sfreq),
             'waveform_length': np.sum(np.abs(np.diff(epoch))),
         }
-        # Calculate power in each frequency band
-       
-        # for band, (fmin, fmax) in bands.items():
-        #     # Find the power spectral density within the band
-        #     band_inds = np.where((f >= fmin) & (f <= fmax))[0]
-        #     band_psd = psd_welch[band_inds]
-            
-        #     # Find the peak frequency and its power
-        #     peak_freq = f[band_inds][np.argmax(band_psd)]
-        #     peak_power = np.max(band_psd)
-            
-        #     features[f'{band}_peak_freq'] = peak_freq
-        #     features[f'{band}_peak_power'] = peak_power
-        
 
         # Append the features of the current epoch to the list
         features_list.append(features)
@@ -661,18 +704,6 @@ def create_epochs_from_preprocessed_features(data, epoch_length=1.0, sfreq=None)
     print(f'Feature DataFrame shape: {feature_df.shape}')
     return feature_df
 
-  
-
-processed_data_keywords = [
-    'feature', 'power', 'mean', 'stddev', 'variance', 
-    'entropy', 'fft', 'frequency', 'band', 'delta', 
-    'theta', 'alpha', 'beta', 'gamma','max','min','avgmax','avgmin','skew','kurt',
-    'median','var','energy','sigma','coefficient','D0','D1','D2','KFD','PFD','HFD','LZC',
-    'CTM','AMI','RR','determinant','det','Lam','avg','average','Lmax','Vmin','TT','divergence',
-    'time frequency distributions','TFD','fast fourier transformation','EM',
-    'eigenvector methods','WT','wavelet transform','correlate'
-]
-
 
 # Update the feature extraction to return a DataFrame
 def extract_features_as_df(raw):
@@ -785,6 +816,10 @@ def extract_features_csp(raw, sfreq, labels, epoch_length=1.0):
     epochs = mne.make_fixed_length_epochs(raw, duration=epoch_length, preload=True, reject_by_annotation=False)
     epochs_data = epochs.get_data()
 
+    # if is_mat_data_clean(epochs_data, sfreq):
+    #     print("Data is clean. Continuing feature extraction.")
+
+
     # Ensure the number of epochs and labels match
     min_len = min(len(epochs_data), len(labels))
     epochs_data = epochs_data[:min_len]
@@ -837,6 +872,7 @@ def extract_features_csp(raw, sfreq, labels, epoch_length=1.0):
     # Create a DataFrame from the combined features
     features_df = pd.DataFrame(combined_features)
 
+
     # Add labels to the DataFrame
     features_df['label'] = labels
     features_message = ("Extracted features using CSP, which maximizes the variance for two classes, "
@@ -855,9 +891,15 @@ def csv_identification(file_paths,processed_data_keywords):
         
         # Determine the type of file and handle it accordingly
         if file_path.lower().endswith(('.csv', '.xls', '.xlsx', '.xlsm', '.xlsb')):
-            raw_data, sfreq = read_eeg_file(file_path)
+            raw_data, sfreq= read_eeg_file(file_path)
             # picks = random.sample(raw_data.ch_names, 10)
             # plot_raw_eeg(raw_data, title=f'EEG Data from {file_path}', picks=picks)
+
+            # if raw_data is not None and isinstance(raw_data, mne.io.RawArray):
+            #     data_df = raw_data.to_data_frame()
+            #     if not is_data_clean(data_df):
+            #         print(f"Data in {file_path} is not clean.")
+            #         continue
 
             if isinstance(raw_data, mne.io.RawArray):
                 # Convert to DataFrame here
@@ -900,15 +942,6 @@ def create_cnn_model(input_shape):
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 
-model_directory = 'E:/EEG-Classification/saved_models'
-os.makedirs(model_directory, exist_ok=True)
-model_svc = os.path.join(model_directory, 'svc_model.joblib')
-model_rf = os.path.join(model_directory, 'rf_model.joblib')
-model_lr = os.path.join(model_directory, 'lr_model.joblib')
-model_knn = os.path.join(model_directory, 'knn_model.joblib')
-model_cnn = os.path.join(model_directory, 'cnn_model.joblib')
-encoder_path = os.path.join(model_directory, 'label_encoder.joblib')
-y_original = None # original labels: the last column
 
 
 def csv_modeling():
@@ -1150,13 +1183,34 @@ def csv_modeling():
         # print("Unique classes in y_train:", np.unique(y_train))
         # print("Unique classes in y_test:", np.unique(y_test)) 
 
-
-def csv_svc_model():
+labels_text_array=[]
+def csv_svc_model(label_conditions_path):
     print("Length of all_features: ", len(all_features))
     print("Length of labels_list: ", len(labels_list))   
-    
+    labels_text_array=[]
     X = all_features.iloc[:, :-1]  # features: all columns except the last
     y_original = all_features.iloc[:, -1]  # original labels: the last column
+    labels_array = []
+
+    for label in y_original:
+        if isinstance(label, (int, float)):  # Check if the label is numeric
+            if label >= 1_000_000:  # Check if the label is in millions
+                label = int(label // 1_000_000)  # Scale down to just the millions and convert to int
+            else:
+                label = int(label)  # Ensure it's an integer to remove trailing decimals
+        labels_array.append(label)
+        
+    print("Labels array:",labels_array)    
+
+    if os.path.isfile(label_conditions_path):
+        label_conditions = read_label_conditions(label_conditions_path)
+    else:
+        raise ValueError(f"Label conditions file not found at {label_conditions_path}")
+    
+    # Convert numeric labels in labels_array to text using label_conditions mapping
+    labels_text_array = [label_conditions.get(str(label).lower(), "Unknown label") for label in labels_array]
+    print("labels text array:",labels_text_array)
+    
 
     # Fit the label encoder on the unique labels in the dataset
     label_encoder.fit(np.unique(y_original))
@@ -1221,14 +1275,34 @@ def csv_svc_model():
         result_svc_csv['Precision'].append(precision)
         result_svc_csv['Recall'].append(recall)
     
-    return accuracy_svc_csv,result_svc_csv
+    return accuracy_svc_csv,result_svc_csv,labels_text_array
 
-def csv_random_model():
+def csv_random_model(label_conditions_path):
     print("Length of all_features: ", len(all_features))
     print("Length of labels_list: ", len(labels_list))   
-    
+    labels_text_array=[]
     X = all_features.iloc[:, :-1]  # features: all columns except the last
     y_original = all_features.iloc[:, -1]  # original labels: the last column
+    labels_array = []
+
+    for label in y_original:
+        if isinstance(label, (int, float)):  # Check if the label is numeric
+            if label >= 1_000_000:  # Check if the label is in millions
+                label = int(label // 1_000_000)  # Scale down to just the millions and convert to int
+            else:
+                label = int(label)  # Ensure it's an integer to remove trailing decimals
+        labels_array.append(label)
+        
+    print("Labels array:",labels_array)  
+
+    if os.path.isfile(label_conditions_path):
+        label_conditions = read_label_conditions(label_conditions_path)
+    else:
+        raise ValueError(f"Label conditions file not found at {label_conditions_path}")
+    
+    # Convert numeric labels in labels_array to text using label_conditions mapping
+    labels_text_array = [label_conditions.get(str(label).lower(), "Unknown label") for label in labels_array]
+    print("labels text array:",labels_text_array)
 
     # Fit the label encoder on the unique labels in the dataset
     label_encoder.fit(np.unique(y_original))
@@ -1297,14 +1371,35 @@ def csv_random_model():
         result_random_csv['Precision'].append(precision)
         result_random_csv['Recall'].append(recall)
 
-    return accuracy_random_csv,result_random_csv
+    return accuracy_random_csv,result_random_csv,labels_text_array
 
-def csv_logistic_model():
+def csv_logistic_model(label_conditions_path):
     print("Length of all_features: ", len(all_features))
     print("Length of labels_list: ", len(labels_list))   
     
+    labels_text_array=[]
     X = all_features.iloc[:, :-1]  # features: all columns except the last
     y_original = all_features.iloc[:, -1]  # original labels: the last column
+    labels_array = []
+
+    for label in y_original:
+        if isinstance(label, (int, float)):  # Check if the label is numeric
+            if label >= 1_000_000:  # Check if the label is in millions
+                label = int(label // 1_000_000)  # Scale down to just the millions and convert to int
+            else:
+                label = int(label)  # Ensure it's an integer to remove trailing decimals
+        labels_array.append(label)
+        
+    print("Labels array:",labels_array) 
+
+    if os.path.isfile(label_conditions_path):
+        label_conditions = read_label_conditions(label_conditions_path)
+    else:
+        raise ValueError(f"Label conditions file not found at {label_conditions_path}")
+    
+    # Convert numeric labels in labels_array to text using label_conditions mapping
+    labels_text_array = [label_conditions.get(str(label).lower(), "Unknown label") for label in labels_array]
+    print("labels text array:",labels_text_array)
 
     # Fit the label encoder on the unique labels in the dataset
     label_encoder.fit(np.unique(y_original))
@@ -1373,15 +1468,36 @@ def csv_logistic_model():
         result_logistic_csv['Precision'].append(precision)
         result_logistic_csv['Recall'].append(recall)
     
-    return accuracy_logistic_csv,result_logistic_csv
+    return accuracy_logistic_csv,result_logistic_csv,labels_text_array
 
 
-def csv_knn_model():
+def csv_knn_model(label_conditions_path):
     print("Length of all_features: ", len(all_features))
     print("Length of labels_list: ", len(labels_list))   
-    
+
+    labels_text_array=[]
     X = all_features.iloc[:, :-1]  # features: all columns except the last
     y_original = all_features.iloc[:, -1]  # original labels: the last column
+    labels_array = []
+
+    for label in y_original:
+        if isinstance(label, (int, float)):  # Check if the label is numeric
+            if label >= 1_000_000:  # Check if the label is in millions
+                label = int(label // 1_000_000)  # Scale down to just the millions and convert to int
+            else:
+                label = int(label)  # Ensure it's an integer to remove trailing decimals
+        labels_array.append(label)
+        
+    print("Labels array:",labels_array) 
+
+    if os.path.isfile(label_conditions_path):
+        label_conditions = read_label_conditions(label_conditions_path)
+    else:
+        raise ValueError(f"Label conditions file not found at {label_conditions_path}")
+    
+    # Convert numeric labels in labels_array to text using label_conditions mapping
+    labels_text_array = [label_conditions.get(str(label).lower(), "Unknown label") for label in labels_array]
+    print("labels text array:",labels_text_array)
 
     # Fit the label encoder on the unique labels in the dataset
     label_encoder.fit(np.unique(y_original))
@@ -1450,15 +1566,36 @@ def csv_knn_model():
         result_knn_csv['Precision'].append(precision)
         result_knn_csv['Recall'].append(recall)
     
-    return accuracy_knn_csv,result_knn_csv
+    return accuracy_knn_csv,result_knn_csv,labels_text_array
 
 
-def csv_cnn_model():
+def csv_cnn_model(label_conditions_path):
     print("Length of all_features: ", len(all_features))
     print("Length of labels_list: ", len(labels_list))   
     
+    labels_text_array=[]
     X = all_features.iloc[:, :-1]  # features: all columns except the last
     y_original = all_features.iloc[:, -1]  # original labels: the last column
+    labels_array = []
+
+    for label in y_original:
+        if isinstance(label, (int, float)):  # Check if the label is numeric
+            if label >= 1_000_000:  # Check if the label is in millions
+                label = int(label // 1_000_000)  # Scale down to just the millions and convert to int
+            else:
+                label = int(label)  # Ensure it's an integer to remove trailing decimals
+        labels_array.append(label)
+        
+    print("Labels array:",labels_array) 
+
+    if os.path.isfile(label_conditions_path):
+        label_conditions = read_label_conditions(label_conditions_path)
+    else:
+        raise ValueError(f"Label conditions file not found at {label_conditions_path}")
+    
+    # Convert numeric labels in labels_array to text using label_conditions mapping
+    labels_text_array = [label_conditions.get(str(label).lower(), "Unknown label") for label in labels_array]
+    print("labels text array:",labels_text_array)
 
     # Fit the label encoder on the unique labels in the dataset
     label_encoder.fit(np.unique(y_original))
@@ -1545,7 +1682,7 @@ def csv_cnn_model():
         result_cnn_csv['Precision'].append(precision)
         result_cnn_csv['Recall'].append(recall)
     
-    return accuracy_cnn_csv,result_cnn_csv
+    return accuracy_cnn_csv,result_cnn_csv,labels_text_array
 
 def read_label_conditions(file_path):
     print("entered read label")
@@ -1561,7 +1698,7 @@ def read_label_conditions(file_path):
                 if key.isdigit():
                     key = str(int(key))  # Convert digits to integers, then to strings to remove leading zeros
                 # Convert everything to a consistent case
-                label_conditions[key.lower()] = parts[1].strip()
+                label_conditions[key.lower()] = parts[1].strip()   
     return label_conditions
 
 def load_and_predict(new_data, label_conditions):
@@ -1923,13 +2060,24 @@ def load_and_predict_cnn(new_data, label_conditions):
     # Return the dictionary containing all model predictions
     return model_cnn_csv_prediction
 
+
+
 def mat_modeling(subject_identifier,features_df,labels):
+    subject_scores = defaultdict(lambda: defaultdict(list))
+    subject_data = {}
+    accuracy_mat=[]
+
 
     if subject_identifier not in subject_data:
             subject_data[subject_identifier] = {'features': pd.DataFrame(), 'labels': []}
     # Append features and labels to the subject's data
     subject_data[subject_identifier]['features'] = pd.concat([subject_data[subject_identifier]['features'], features_df], ignore_index=True)
     subject_data[subject_identifier]['labels'].extend(labels) 
+    trial_labels = subject_data[subject_identifier]['labels']
+    trial_labels_sentences = [label_descriptions[label] for label in trial_labels]
+    #print(f"Labels for each trial for subject {subject_identifier}: {trial_labels_sentences}")  # This prints the labels as sentences
+    
+
    # Loop over your subject_data to perform cross-validation for each subject
     for subject_identifier, data in subject_data.items():
         X = data['features'].iloc[:, :-1]  # Features: all columns except the last
@@ -1978,6 +2126,17 @@ def mat_modeling(subject_identifier,features_df,labels):
             # Get the base subject identifier without session (e.g., "sub-001")
             base_subject_identifier = subject_identifier.rsplit('_', 1)[0]
             subject_scores[base_subject_identifier][clf_name].extend(cv_scores)
+ 
+        
+        for clf_name, clf in classifiers.items():
+            if clf_name == 'CNN':
+                clf.fit(X_reshaped, y)
+                model_path = os.path.join(model_directory_mat, f'{clf_name.lower()}_model.h5')
+                clf.model_.save(model_path)
+            else:
+                clf.fit(X_scaled, y)
+                model_path = os.path.join(model_directory_mat, f'{clf_name.lower().replace(" ", "_")}_model.joblib')
+                dump(clf, model_path)
 
         # Now calculate the overall accuracy for each subject by taking the mean of the aggregated scores
         overall_accuracy_dict = defaultdict(dict)
@@ -2088,6 +2247,410 @@ def mat_modeling(subject_identifier,features_df,labels):
 
     #     overall_accuracy = accuracy_score(all_true_labels, all_predictions)
     #     print(f'All model accuracy across all files: {overall_accuracy * 100:.2f}%')
+
+def mat_modeling_svc(subject_identifier, features_df, labels):
+    subject_scores = defaultdict(lambda: defaultdict(list))
+    subject_data = {}
+    accuracy_mat_svc = []
+    trial_labels_sentences_array = []  # Array to store labels for each trial
+
+
+    if subject_identifier not in subject_data:
+        subject_data[subject_identifier] = {'features': pd.DataFrame(), 'labels': []}
+    
+    # Append features and labels to the subject's data
+    subject_data[subject_identifier]['features'] = pd.concat([subject_data[subject_identifier]['features'], features_df], ignore_index=True)
+    subject_data[subject_identifier]['labels'].extend(labels)
+    trial_labels = subject_data[subject_identifier]['labels']
+    trial_labels_sentences = [label_descriptions[label] for label in trial_labels]    
+    labels_message = f"Labels for each trial for subject {subject_identifier}: {trial_labels_sentences}"
+    trial_labels_sentences_array.append(labels_message)
+    
+    
+    # Loop over your subject_data to perform cross-validation for each subject
+    for subject_identifier, data in subject_data.items():
+        X = data['features'].iloc[:, :-1]  # Features: all columns except the last
+        y = LabelEncoder().fit_transform(data['features'].iloc[:, -1])  # Labels: the last column
+        X_scaled = StandardScaler().fit_transform(X)  # Standardize features
+        class_distribution = Counter(y)
+        print("Class distribution:", class_distribution)
+
+        for label, count in class_distribution.items():
+            if count < 5:
+                print(f"Class {label} has fewer than 5 samples: {count}")
+
+        # Define classifiers
+        classifiers = {
+            'SVC': SVC(),
+        }
+
+        # Define scoring metrics
+        scoring_metrics = {
+            'accuracy': make_scorer(accuracy_score),
+            'precision': make_scorer(precision_score, average='weighted'),
+            'recall': make_scorer(recall_score, average='weighted'),
+            'f1_score': make_scorer(f1_score, average='weighted'),
+        }
+
+        min_samples_per_class = min(np.bincount(y))
+
+        # Perform cross-validation and collect metrics for each classifier
+        skf = StratifiedKFold(n_splits=10, shuffle=True)
+        for clf_name, clf in classifiers.items():
+            clf.fit(X_scaled, y)
+            model_path = os.path.join(model_directory_mat, f'{clf_name.lower().replace(" ", "_")}_model.joblib')
+            dump(clf, model_path)
+
+        for clf_name, clf in classifiers.items():
+            cv_results = cross_validate(clf, X_scaled, y, cv=skf, scoring=scoring_metrics)
+            
+            # Calculate mean of each metric
+            mean_accuracy = np.mean(cv_results['test_accuracy'])
+            mean_precision = np.mean(cv_results['test_precision'])
+            mean_recall = np.mean(cv_results['test_recall'])
+            mean_f1_score = np.mean(cv_results['test_f1_score'])
+
+            # Get the base subject identifier without session (e.g., "sub-001")
+            base_subject_identifier = subject_identifier.rsplit('_', 1)[0]
+            subject_scores[base_subject_identifier][clf_name].extend([mean_accuracy, mean_precision, mean_recall, mean_f1_score])
+
+            # Generate the message with all metrics
+            accuracy_message = (f"Metrics for {clf_name} on subject {base_subject_identifier}: "
+                                f"Accuracy: {mean_accuracy * 100:.2f}%, "
+                                f"Precision: {mean_precision * 100:.2f}%, "
+                                f"Recall: {mean_recall * 100:.2f}%, "
+                                f"F1 Score: {mean_f1_score * 100:.2f}%")
+            accuracy_mat_svc.append(accuracy_message)  # Store the message in the list
+            print(accuracy_message)
+    #print(trial_labels_sentences_array)
+    return accuracy_mat_svc,trial_labels_sentences_array
+
+def mat_modeling_random(subject_identifier,features_df,labels):
+    subject_scores = defaultdict(lambda: defaultdict(list))
+    subject_data = {}
+    accuracy_mat_random=[]
+    trial_labels_sentences_array = []  # Array to store labels for each trial
+
+
+    if subject_identifier not in subject_data:
+            subject_data[subject_identifier] = {'features': pd.DataFrame(), 'labels': []}
+    # Append features and labels to the subject's data
+    subject_data[subject_identifier]['features'] = pd.concat([subject_data[subject_identifier]['features'], features_df], ignore_index=True)
+    subject_data[subject_identifier]['labels'].extend(labels)
+    trial_labels = subject_data[subject_identifier]['labels']
+    trial_labels_sentences = [label_descriptions[label] for label in trial_labels]
+    labels_message = f"Labels for each trial for subject {subject_identifier}: {trial_labels_sentences}"
+    trial_labels_sentences_array.append(labels_message)
+    
+     
+   # Loop over your subject_data to perform cross-validation for each subject
+    for subject_identifier, data in subject_data.items():
+        X = data['features'].iloc[:, :-1]  # Features: all columns except the last
+        y = LabelEncoder().fit_transform(data['features'].iloc[:, -1])  # Labels: the last column
+        X_scaled = StandardScaler().fit_transform(X)  # Standardize features
+
+        # Assuming X_scaled.shape is (n_samples, n_features)
+        n_samples, n_features = X_scaled.shape
+
+            # Check if n_features is less than the desired kernel_size
+        if n_features < 3:
+            # Code to handle the situation, e.g., reducing kernel_size or feature engineering
+            # For example, reducing kernel_size:
+            kernel_size = n_features  # Set kernel size equal to the number of features
+        else:
+            kernel_size = 3  # Or any other value greater than or equal to n_features
+
+            # Define classifiers
+        classifiers = {
+                'RandomForest': RandomForestClassifier(),
+            }
+
+         # Define scoring metrics
+        scoring_metrics = {
+            'accuracy': make_scorer(accuracy_score),
+            'precision': make_scorer(precision_score, average='weighted'),
+            'recall': make_scorer(recall_score, average='weighted'),
+            'f1_score': make_scorer(f1_score, average='weighted'),
+        }
+
+        for clf_name, clf in classifiers.items():
+            clf.fit(X_scaled, y)
+            model_path = os.path.join(model_directory_mat, f'{clf_name.lower().replace(" ", "_")}_model.joblib')
+            dump(clf, model_path)
+
+        # Perform cross-validation and collect metrics for each classifier
+        skf = StratifiedKFold(n_splits=10, shuffle=True)
+        for clf_name, clf in classifiers.items():
+            cv_results = cross_validate(clf, X_scaled, y, cv=skf, scoring=scoring_metrics)
+            
+            # Calculate mean of each metric
+            mean_accuracy = np.mean(cv_results['test_accuracy'])
+            mean_precision = np.mean(cv_results['test_precision'])
+            mean_recall = np.mean(cv_results['test_recall'])
+            mean_f1_score = np.mean(cv_results['test_f1_score'])
+
+            # Get the base subject identifier without session (e.g., "sub-001")
+            base_subject_identifier = subject_identifier.rsplit('_', 1)[0]
+            subject_scores[base_subject_identifier][clf_name].extend([mean_accuracy, mean_precision, mean_recall, mean_f1_score])
+
+            # Generate the message with all metrics
+            accuracy_message = (f"Metrics for {clf_name} on subject {base_subject_identifier}: "
+                                f"Accuracy: {mean_accuracy * 100:.2f}%, "
+                                f"Precision: {mean_precision * 100:.2f}%, "
+                                f"Recall: {mean_recall * 100:.2f}%, "
+                                f"F1 Score: {mean_f1_score * 100:.2f}%")
+            accuracy_mat_random.append(accuracy_message)  # Store the message in the list
+            print(accuracy_message)
+        return accuracy_mat_random,trial_labels_sentences_array
+    
+
+def mat_modeling_logistic(subject_identifier,features_df,labels):
+    subject_scores = defaultdict(lambda: defaultdict(list))
+    subject_data = {}
+    accuracy_mat_logistic=[]
+    trial_labels_sentences_array = []  # Array to store labels for each trial
+
+
+    if subject_identifier not in subject_data:
+            subject_data[subject_identifier] = {'features': pd.DataFrame(), 'labels': []}
+    # Append features and labels to the subject's data
+    subject_data[subject_identifier]['features'] = pd.concat([subject_data[subject_identifier]['features'], features_df], ignore_index=True)
+    subject_data[subject_identifier]['labels'].extend(labels) 
+    trial_labels = subject_data[subject_identifier]['labels']
+    trial_labels_sentences = [label_descriptions[label] for label in trial_labels]
+    labels_message = f"Labels for each trial for subject {subject_identifier}: {trial_labels_sentences}"
+    trial_labels_sentences_array.append(labels_message)
+    
+    
+   # Loop over your subject_data to perform cross-validation for each subject
+    for subject_identifier, data in subject_data.items():
+        X = data['features'].iloc[:, :-1]  # Features: all columns except the last
+        y = LabelEncoder().fit_transform(data['features'].iloc[:, -1])  # Labels: the last column
+        X_scaled = StandardScaler().fit_transform(X)  # Standardize features
+
+        # Assuming X_scaled.shape is (n_samples, n_features)
+        n_samples, n_features = X_scaled.shape
+
+            # Check if n_features is less than the desired kernel_size
+        if n_features < 3:
+            # Code to handle the situation, e.g., reducing kernel_size or feature engineering
+            # For example, reducing kernel_size:
+            kernel_size = n_features  # Set kernel size equal to the number of features
+        else:
+            kernel_size = 3  # Or any other value greater than or equal to n_features
+
+            # Define classifiers
+        classifiers = {
+                'Logistic Regression': LogisticRegression(),
+            }
+
+         # Define scoring metrics
+        scoring_metrics = {
+            'accuracy': make_scorer(accuracy_score),
+            'precision': make_scorer(precision_score, average='weighted'),
+            'recall': make_scorer(recall_score, average='weighted'),
+            'f1_score': make_scorer(f1_score, average='weighted'),
+        }
+
+        for clf_name, clf in classifiers.items():
+            clf.fit(X_scaled, y)
+            model_path = os.path.join(model_directory_mat, f'{clf_name.lower().replace(" ", "_")}_model.joblib')
+            dump(clf, model_path)
+
+        # Perform cross-validation and collect metrics for each classifier
+        skf = StratifiedKFold(n_splits=10, shuffle=True)
+        for clf_name, clf in classifiers.items():
+            cv_results = cross_validate(clf, X_scaled, y, cv=skf, scoring=scoring_metrics)
+            
+            # Calculate mean of each metric
+            mean_accuracy = np.mean(cv_results['test_accuracy'])
+            mean_precision = np.mean(cv_results['test_precision'])
+            mean_recall = np.mean(cv_results['test_recall'])
+            mean_f1_score = np.mean(cv_results['test_f1_score'])
+
+            # Get the base subject identifier without session (e.g., "sub-001")
+            base_subject_identifier = subject_identifier.rsplit('_', 1)[0]
+            subject_scores[base_subject_identifier][clf_name].extend([mean_accuracy, mean_precision, mean_recall, mean_f1_score])
+
+            # Generate the message with all metrics
+            accuracy_message = (f"Metrics for {clf_name} on subject {base_subject_identifier}: "
+                                f"Accuracy: {mean_accuracy * 100:.2f}%, "
+                                f"Precision: {mean_precision * 100:.2f}%, "
+                                f"Recall: {mean_recall * 100:.2f}%, "
+                                f"F1 Score: {mean_f1_score * 100:.2f}%")
+            accuracy_mat_logistic.append(accuracy_message)  # Store the message in the list
+            print(accuracy_message)
+        return accuracy_mat_logistic,trial_labels_sentences_array
+
+
+def mat_modeling_knn(subject_identifier,features_df,labels):
+    subject_scores = defaultdict(lambda: defaultdict(list))
+    subject_data = {}
+    accuracy_mat_knn=[]
+    trial_labels_sentences_array = []  # Array to store labels for each trial
+
+
+    if subject_identifier not in subject_data:
+            subject_data[subject_identifier] = {'features': pd.DataFrame(), 'labels': []}
+    # Append features and labels to the subject's data
+    subject_data[subject_identifier]['features'] = pd.concat([subject_data[subject_identifier]['features'], features_df], ignore_index=True)
+    subject_data[subject_identifier]['labels'].extend(labels) 
+    trial_labels = subject_data[subject_identifier]['labels']
+    trial_labels_sentences = [label_descriptions[label] for label in trial_labels]
+    labels_message = f"Labels for each trial for subject {subject_identifier}: {trial_labels_sentences}"
+    trial_labels_sentences_array.append(labels_message)
+    
+    
+   # Loop over your subject_data to perform cross-validation for each subject
+    for subject_identifier, data in subject_data.items():
+        X = data['features'].iloc[:, :-1]  # Features: all columns except the last
+        y = LabelEncoder().fit_transform(data['features'].iloc[:, -1])  # Labels: the last column
+        X_scaled = StandardScaler().fit_transform(X)  # Standardize features
+
+        # Assuming X_scaled.shape is (n_samples, n_features)
+        n_samples, n_features = X_scaled.shape
+
+            # Check if n_features is less than the desired kernel_size
+        if n_features < 3:
+            # Code to handle the situation, e.g., reducing kernel_size or feature engineering
+            # For example, reducing kernel_size:
+            kernel_size = n_features  # Set kernel size equal to the number of features
+        else:
+            kernel_size = 3  # Or any other value greater than or equal to n_features
+
+            # Define classifiers
+        classifiers = {
+                'KNN':KNeighborsClassifier(n_neighbors=5) ,
+            }
+
+          
+         # Define scoring metrics
+        scoring_metrics = {
+            'accuracy': make_scorer(accuracy_score),
+            'precision': make_scorer(precision_score, average='weighted'),
+            'recall': make_scorer(recall_score, average='weighted'),
+            'f1_score': make_scorer(f1_score, average='weighted'),
+        }
+
+        for clf_name, clf in classifiers.items():
+            clf.fit(X_scaled, y)
+            model_path = os.path.join(model_directory_mat, f'{clf_name.lower().replace(" ", "_")}_model.joblib')
+            dump(clf, model_path)
+
+        # Perform cross-validation and collect metrics for each classifier
+        skf = StratifiedKFold(n_splits=10, shuffle=True)
+        for clf_name, clf in classifiers.items():
+            cv_results = cross_validate(clf, X_scaled, y, cv=skf, scoring=scoring_metrics)
+            
+            # Calculate mean of each metric
+            mean_accuracy = np.mean(cv_results['test_accuracy'])
+            mean_precision = np.mean(cv_results['test_precision'])
+            mean_recall = np.mean(cv_results['test_recall'])
+            mean_f1_score = np.mean(cv_results['test_f1_score'])
+
+            # Get the base subject identifier without session (e.g., "sub-001")
+            base_subject_identifier = subject_identifier.rsplit('_', 1)[0]
+            subject_scores[base_subject_identifier][clf_name].extend([mean_accuracy, mean_precision, mean_recall, mean_f1_score])
+
+            # Generate the message with all metrics
+            accuracy_message = (f"Metrics for {clf_name} on subject {base_subject_identifier}: "
+                                f"Accuracy: {mean_accuracy * 100:.2f}%, "
+                                f"Precision: {mean_precision * 100:.2f}%, "
+                                f"Recall: {mean_recall * 100:.2f}%, "
+                                f"F1 Score: {mean_f1_score * 100:.2f}%")
+            accuracy_mat_knn.append(accuracy_message)  # Store the message in the list
+            print(accuracy_message)
+        return accuracy_mat_knn,trial_labels_sentences_array       
+    
+def mat_modeling_cnn(subject_identifier,features_df,labels):
+    subject_scores = defaultdict(lambda: defaultdict(list))
+    subject_data = {}
+    accuracy_mat_cnn=[]
+    trial_labels_sentences_array = []  # Array to store labels for each trial
+
+
+    if subject_identifier not in subject_data:
+            subject_data[subject_identifier] = {'features': pd.DataFrame(), 'labels': []}
+    # Append features and labels to the subject's data
+    subject_data[subject_identifier]['features'] = pd.concat([subject_data[subject_identifier]['features'], features_df], ignore_index=True)
+    subject_data[subject_identifier]['labels'].extend(labels) 
+    trial_labels = subject_data[subject_identifier]['labels']
+    trial_labels_sentences = [label_descriptions[label] for label in trial_labels]
+    labels_message = f"Labels for each trial for subject {subject_identifier}: {trial_labels_sentences}"
+    trial_labels_sentences_array.append(labels_message)
+    
+    
+   # Loop over your subject_data to perform cross-validation for each subject
+    for subject_identifier, data in subject_data.items():
+        X = data['features'].iloc[:, :-1]  # Features: all columns except the last
+        y = LabelEncoder().fit_transform(data['features'].iloc[:, -1])  # Labels: the last column
+        X_scaled = StandardScaler().fit_transform(X)  # Standardize features
+
+        # Assuming X_scaled.shape is (n_samples, n_features)
+        n_samples, n_features = X_scaled.shape
+
+            # Check if n_features is less than the desired kernel_size
+        if n_features < 3:
+            # Code to handle the situation, e.g., reducing kernel_size or feature engineering
+            # For example, reducing kernel_size:
+            kernel_size = n_features  # Set kernel size equal to the number of features
+        else:
+            kernel_size = 3  # Or any other value greater than or equal to n_features
+
+            # Reshape input data for the CNN
+        X_reshaped = X_scaled.reshape((n_samples, n_features, 1))
+
+            # Now define the input shape for the CNN model
+        input_shape = (n_features, 1)  # Revised input shape
+           
+        cnn_classifier = KerasClassifier(build_fn=create_cnn_model, input_shape=input_shape, epochs=10, batch_size=10, verbose=0)
+
+            # Define classifiers
+        classifiers = {
+                'CNN': cnn_classifier
+            }
+
+            # Reshape the input data for CNN
+        X_reshaped = X_scaled.reshape((X_scaled.shape[0], X_scaled.shape[1], 1))
+
+        scoring_metrics = {
+        'accuracy': 'accuracy',
+        'precision': make_scorer(precision_score, average='weighted', zero_division=0),
+        'recall': make_scorer(recall_score, average='weighted', zero_division=0),
+        'f1_score': make_scorer(f1_score, average='weighted', zero_division=0),
+    }
+        
+        for clf_name, clf in classifiers.items():
+            if clf_name == 'CNN':
+                clf.fit(X_reshaped, y)
+                model_path = os.path.join(model_directory_mat, f'{clf_name.lower()}_model.h5')
+                clf.model_.save(model_path)
+
+            # Perform cross-validation and collect accuracy for each classifier
+        skf = StratifiedKFold(n_splits=10, shuffle=True)
+        for clf_name, clf in classifiers.items():
+            if clf_name=='CNN':
+                cv_results = cross_validate(clf, X_reshaped, y, cv=skf, scoring=scoring_metrics)    
+                
+            # Calculate mean of each metric
+            mean_accuracy = np.mean(cv_results['test_accuracy'])
+            mean_precision = np.mean(cv_results['test_precision'])
+            mean_recall = np.mean(cv_results['test_recall'])
+            mean_f1_score = np.mean(cv_results['test_f1_score'])
+
+            # Get the base subject identifier without session (e.g., "sub-001")
+            base_subject_identifier = subject_identifier.rsplit('_', 1)[0]
+            subject_scores[base_subject_identifier][clf_name].extend([mean_accuracy, mean_precision, mean_recall, mean_f1_score])
+
+            # Generate the message with all metrics
+            accuracy_message = (f"Metrics for {clf_name} on subject {base_subject_identifier}: "
+                                f"Accuracy: {mean_accuracy * 100:.2f}%, "
+                                f"Precision: {mean_precision * 100:.2f}%, "
+                                f"Recall: {mean_recall * 100:.2f}%, "
+                                f"F1 Score: {mean_f1_score * 100:.2f}%")
+            accuracy_mat_cnn.append(accuracy_message)  # Store the message in the list
+            print(accuracy_message)
+        return accuracy_mat_cnn,trial_labels_sentences_array   
  
 def get_label_text():
     global label_conditions
@@ -2098,6 +2661,422 @@ def get_label_text():
             print("text entered")
             # Assuming there's only one TXT file in the directory
             label_conditions = read_label_conditions(file_path) 
+
+results_array = []
+
+
+def predict_movement(features_df,subject_identifier):
+
+    
+    # Read, preprocess, and extract features just like before
+    
+    X_test = features_df.iloc[:, :-1]  # Features
+    y_test = features_df.iloc[:, -1]  # Labels
+
+    # Standardize the features using a scaler fitted on the training data
+    scaler = StandardScaler().fit(X_test)
+    X_test_scaled = scaler.transform(X_test)
+
+    # Prepare a label encoder for converting string labels to integers, if necessary
+    label_encoder = LabelEncoder()
+    y_test_encoded = label_encoder.fit_transform(y_test)
+
+    model_directory_mat = 'saved_models_mat'
+
+    # List of models to predict with
+    model_files = [
+        'randomforest_model.joblib',
+        'svc_model.joblib',
+        'logistic_regression_model.joblib',
+        'knn_model.joblib',
+        'cnn_model.h5'  # Keras model has a different file extension
+    ]
+
+    predictions_output = {}
+
+    # Iterate over each model file, load the model, and make predictions
+    for model_file in model_files:
+        model_path = os.path.join(model_directory_mat, model_file)
+        model_name = model_file.replace('_model.joblib', '').replace('.h5', '')
+
+        # Condition to check if the model is Keras model or not
+        if model_file.endswith('.h5'):  # Keras model
+            model = load_model(model_path)
+            # Reshape the data for CNN
+            X_test_reshaped = X_test_scaled.reshape((X_test_scaled.shape[0], X_test_scaled.shape[1], 1))
+            predictions = model.predict(X_test_reshaped)
+            predicted_classes = np.argmax(predictions, axis=1)
+        else:  # Sklearn models
+            model = load(model_path)
+            predicted_classes = model.predict(X_test_scaled)
+
+        # Convert numeric predictions back to original labels if necessary
+        predicted_labels = label_encoder.inverse_transform(predicted_classes)
+
+        # Convert numeric predictions to descriptive sentences
+        predicted_sentences = [label_descriptions.get(label, "Unknown movement") for label in predicted_labels]
+
+        # Store the predictions for the current model as sentences
+        predictions_output[model_name] = predicted_sentences
+
+    all_predictions = {subject_identifier: predictions_output}
+
+    # Initialize an array to hold the results
+    prediction_results = []
+
+    # Process the predictions to generate a structured result
+    for subject_id, models_dict in all_predictions.items():
+        subject_result = {'Subject Identifier': subject_id, 'Models': []}
+        for model_name, predictions in models_dict.items():
+            model_result = {'Model Name': model_name, 'Predictions': []}
+            for i, pred in enumerate(predictions, 1):
+                prediction_text = f"Trial {i}: {pred}"
+                model_result['Predictions'].append(prediction_text)
+            subject_result['Models'].append(model_result)
+        prediction_results.append(subject_result)
+
+    return prediction_results
+
+def predict_movement_svc(features_df,subject_identifier):
+
+    
+    # Read, preprocess, and extract features just like before
+    
+    X_test = features_df.iloc[:, :-1]  # Features
+    y_test = features_df.iloc[:, -1]  # Labels
+
+    # Standardize the features using a scaler fitted on the training data
+    scaler = StandardScaler().fit(X_test)
+    X_test_scaled = scaler.transform(X_test)
+
+    # Prepare a label encoder for converting string labels to integers, if necessary
+    label_encoder = LabelEncoder()
+    y_test_encoded = label_encoder.fit_transform(y_test)
+
+    model_directory_mat = 'saved_models_mat'
+
+    # List of models to predict with
+    model_files = [
+        'svc_model.joblib',
+
+    ]
+
+    predictions_output = {}
+
+    # Iterate over each model file, load the model, and make predictions
+    for model_file in model_files:
+        model_path = os.path.join(model_directory_mat, model_file)
+        model_name = model_file.replace('_model.joblib', '').replace('.h5', '')
+
+        # Condition to check if the model is Keras model or not
+        if model_file.endswith('.h5'):  # Keras model
+            model = load_model(model_path)
+            # Reshape the data for CNN
+            X_test_reshaped = X_test_scaled.reshape((X_test_scaled.shape[0], X_test_scaled.shape[1], 1))
+            predictions = model.predict(X_test_reshaped)
+            predicted_classes = np.argmax(predictions, axis=1)
+        else:  # Sklearn models
+            model = load(model_path)
+            predicted_classes = model.predict(X_test_scaled)
+
+        # Convert numeric predictions back to original labels if necessary
+        predicted_labels = label_encoder.inverse_transform(predicted_classes)
+
+        # Convert numeric predictions to descriptive sentences
+        predicted_sentences = [label_descriptions.get(label, "Unknown movement") for label in predicted_labels]
+
+        # Store the predictions for the current model as sentences
+        predictions_output[model_name] = predicted_sentences
+
+    all_predictions = {subject_identifier: predictions_output}
+
+    # Initialize an array to hold the results
+    prediction_results = []
+
+    # Process the predictions to generate a structured result
+    for subject_id, models_dict in all_predictions.items():
+        subject_result = {'Subject Identifier': subject_id, 'Models': []}
+        for model_name, predictions in models_dict.items():
+            model_result = {'Model Name': model_name, 'Predictions': []}
+            for i, pred in enumerate(predictions, 1):
+                prediction_text = f"Trial {i}: {pred}"
+                model_result['Predictions'].append(prediction_text)
+            subject_result['Models'].append(model_result)
+        prediction_results.append(subject_result)
+
+    return prediction_results   
+
+def predict_movement_random(features_df,subject_identifier):
+
+    
+    # Read, preprocess, and extract features just like before
+    
+    X_test = features_df.iloc[:, :-1]  # Features
+    y_test = features_df.iloc[:, -1]  # Labels
+
+    # Standardize the features using a scaler fitted on the training data
+    scaler = StandardScaler().fit(X_test)
+    X_test_scaled = scaler.transform(X_test)
+
+    # Prepare a label encoder for converting string labels to integers, if necessary
+    label_encoder = LabelEncoder()
+    y_test_encoded = label_encoder.fit_transform(y_test)
+
+    model_directory_mat = 'saved_models_mat'
+
+    # List of models to predict with
+    model_files = [
+        'randomforest_model.joblib',
+    ]
+
+    predictions_output = {}
+
+    # Iterate over each model file, load the model, and make predictions
+    for model_file in model_files:
+        model_path = os.path.join(model_directory_mat, model_file)
+        model_name = model_file.replace('_model.joblib', '').replace('.h5', '')
+
+        # Condition to check if the model is Keras model or not
+        if model_file.endswith('.h5'):  # Keras model
+            model = load_model(model_path)
+            # Reshape the data for CNN
+            X_test_reshaped = X_test_scaled.reshape((X_test_scaled.shape[0], X_test_scaled.shape[1], 1))
+            predictions = model.predict(X_test_reshaped)
+            predicted_classes = np.argmax(predictions, axis=1)
+        else:  # Sklearn models
+            model = load(model_path)
+            predicted_classes = model.predict(X_test_scaled)
+
+        # Convert numeric predictions back to original labels if necessary
+        predicted_labels = label_encoder.inverse_transform(predicted_classes)
+
+        # Convert numeric predictions to descriptive sentences
+        predicted_sentences = [label_descriptions.get(label, "Unknown movement") for label in predicted_labels]
+
+        # Store the predictions for the current model as sentences
+        predictions_output[model_name] = predicted_sentences
+
+    all_predictions = {subject_identifier: predictions_output}
+
+    # Initialize an array to hold the results
+    prediction_results = []
+
+    # Process the predictions to generate a structured result
+    for subject_id, models_dict in all_predictions.items():
+        subject_result = {'Subject Identifier': subject_id, 'Models': []}
+        for model_name, predictions in models_dict.items():
+            model_result = {'Model Name': model_name, 'Predictions': []}
+            for i, pred in enumerate(predictions, 1):
+                prediction_text = f"Trial {i}: {pred}"
+                model_result['Predictions'].append(prediction_text)
+            subject_result['Models'].append(model_result)
+        prediction_results.append(subject_result)
+
+    return prediction_results 
+
+def predict_movement_logistic(features_df,subject_identifier):
+
+    
+    # Read, preprocess, and extract features just like before
+    
+    X_test = features_df.iloc[:, :-1]  # Features
+    y_test = features_df.iloc[:, -1]  # Labels
+
+    # Standardize the features using a scaler fitted on the training data
+    scaler = StandardScaler().fit(X_test)
+    X_test_scaled = scaler.transform(X_test)
+
+    # Prepare a label encoder for converting string labels to integers, if necessary
+    label_encoder = LabelEncoder()
+    y_test_encoded = label_encoder.fit_transform(y_test)
+
+    model_directory_mat = 'saved_models_mat'
+
+    # List of models to predict with
+    model_files = [
+        'logistic_regression_model.joblib',
+    ]
+
+    predictions_output = {}
+
+    # Iterate over each model file, load the model, and make predictions
+    for model_file in model_files:
+        model_path = os.path.join(model_directory_mat, model_file)
+        model_name = model_file.replace('_model.joblib', '').replace('.h5', '')
+
+        # Condition to check if the model is Keras model or not
+        if model_file.endswith('.h5'):  # Keras model
+            model = load_model(model_path)
+            # Reshape the data for CNN
+            X_test_reshaped = X_test_scaled.reshape((X_test_scaled.shape[0], X_test_scaled.shape[1], 1))
+            predictions = model.predict(X_test_reshaped)
+            predicted_classes = np.argmax(predictions, axis=1)
+        else:  # Sklearn models
+            model = load(model_path)
+            predicted_classes = model.predict(X_test_scaled)
+
+        # Convert numeric predictions back to original labels if necessary
+        predicted_labels = label_encoder.inverse_transform(predicted_classes)
+
+        # Convert numeric predictions to descriptive sentences
+        predicted_sentences = [label_descriptions.get(label, "Unknown movement") for label in predicted_labels]
+
+        # Store the predictions for the current model as sentences
+        predictions_output[model_name] = predicted_sentences
+
+    all_predictions = {subject_identifier: predictions_output}
+
+    # Initialize an array to hold the results
+    prediction_results = []
+
+    # Process the predictions to generate a structured result
+    for subject_id, models_dict in all_predictions.items():
+        subject_result = {'Subject Identifier': subject_id, 'Models': []}
+        for model_name, predictions in models_dict.items():
+            model_result = {'Model Name': model_name, 'Predictions': []}
+            for i, pred in enumerate(predictions, 1):
+                prediction_text = f"Trial {i}: {pred}"
+                model_result['Predictions'].append(prediction_text)
+            subject_result['Models'].append(model_result)
+        prediction_results.append(subject_result)
+
+    return prediction_results 
+
+def predict_movement_knn(features_df,subject_identifier):
+
+    
+    # Read, preprocess, and extract features just like before
+    
+    X_test = features_df.iloc[:, :-1]  # Features
+    y_test = features_df.iloc[:, -1]  # Labels
+
+    # Standardize the features using a scaler fitted on the training data
+    scaler = StandardScaler().fit(X_test)
+    X_test_scaled = scaler.transform(X_test)
+
+    # Prepare a label encoder for converting string labels to integers, if necessary
+    label_encoder = LabelEncoder()
+    y_test_encoded = label_encoder.fit_transform(y_test)
+
+    model_directory_mat = 'saved_models_mat'
+
+    # List of models to predict with
+    model_files = [
+        'knn_model.joblib',
+    ]
+
+    predictions_output = {}
+
+    # Iterate over each model file, load the model, and make predictions
+    for model_file in model_files:
+        model_path = os.path.join(model_directory_mat, model_file)
+        model_name = model_file.replace('_model.joblib', '').replace('.h5', '')
+
+        # Condition to check if the model is Keras model or not
+        if model_file.endswith('.h5'):  # Keras model
+            model = load_model(model_path)
+            # Reshape the data for CNN
+            X_test_reshaped = X_test_scaled.reshape((X_test_scaled.shape[0], X_test_scaled.shape[1], 1))
+            predictions = model.predict(X_test_reshaped)
+            predicted_classes = np.argmax(predictions, axis=1)
+        else:  # Sklearn models
+            model = load(model_path)
+            predicted_classes = model.predict(X_test_scaled)
+
+        # Convert numeric predictions back to original labels if necessary
+        predicted_labels = label_encoder.inverse_transform(predicted_classes)
+
+        # Convert numeric predictions to descriptive sentences
+        predicted_sentences = [label_descriptions.get(label, "Unknown movement") for label in predicted_labels]
+
+        # Store the predictions for the current model as sentences
+        predictions_output[model_name] = predicted_sentences
+
+    all_predictions = {subject_identifier: predictions_output}
+
+    # Initialize an array to hold the results
+    prediction_results = []
+
+    # Process the predictions to generate a structured result
+    for subject_id, models_dict in all_predictions.items():
+        subject_result = {'Subject Identifier': subject_id, 'Models': []}
+        for model_name, predictions in models_dict.items():
+            model_result = {'Model Name': model_name, 'Predictions': []}
+            for i, pred in enumerate(predictions, 1):
+                prediction_text = f"Trial {i}: {pred}"
+                model_result['Predictions'].append(prediction_text)
+            subject_result['Models'].append(model_result)
+        prediction_results.append(subject_result)
+
+    return prediction_results 
+
+def predict_movement_cnn(features_df,subject_identifier):
+
+    
+    # Read, preprocess, and extract features just like before
+    
+    X_test = features_df.iloc[:, :-1]  # Features
+    y_test = features_df.iloc[:, -1]  # Labels
+
+    # Standardize the features using a scaler fitted on the training data
+    scaler = StandardScaler().fit(X_test)
+    X_test_scaled = scaler.transform(X_test)
+
+    # Prepare a label encoder for converting string labels to integers, if necessary
+    label_encoder = LabelEncoder()
+    y_test_encoded = label_encoder.fit_transform(y_test)
+
+    model_directory_mat = 'saved_models_mat'
+
+    # List of models to predict with
+    model_files = [
+        'cnn_model.h5'  # Keras model has a different file extension
+    ]
+
+    predictions_output = {}
+
+    # Iterate over each model file, load the model, and make predictions
+    for model_file in model_files:
+        model_path = os.path.join(model_directory_mat, model_file)
+        model_name = model_file.replace('_model.joblib', '').replace('.h5', '')
+
+        # Condition to check if the model is Keras model or not
+        if model_file.endswith('.h5'):  # Keras model
+            model = load_model(model_path)
+            # Reshape the data for CNN
+            X_test_reshaped = X_test_scaled.reshape((X_test_scaled.shape[0], X_test_scaled.shape[1], 1))
+            predictions = model.predict(X_test_reshaped)
+            predicted_classes = np.argmax(predictions, axis=1)
+        else:  # Sklearn models
+            model = load(model_path)
+            predicted_classes = model.predict(X_test_scaled)
+
+        # Convert numeric predictions back to original labels if necessary
+        predicted_labels = label_encoder.inverse_transform(predicted_classes)
+
+        # Convert numeric predictions to descriptive sentences
+        predicted_sentences = [label_descriptions.get(label, "Unknown movement") for label in predicted_labels]
+
+        # Store the predictions for the current model as sentences
+        predictions_output[model_name] = predicted_sentences
+
+    all_predictions = {subject_identifier: predictions_output}
+
+    # Initialize an array to hold the results
+    prediction_results = []
+
+    # Process the predictions to generate a structured result
+    for subject_id, models_dict in all_predictions.items():
+        subject_result = {'Subject Identifier': subject_id, 'Models': []}
+        for model_name, predictions in models_dict.items():
+            model_result = {'Model Name': model_name, 'Predictions': []}
+            for i, pred in enumerate(predictions, 1):
+                prediction_text = f"Trial {i}: {pred}"
+                model_result['Predictions'].append(prediction_text)
+            subject_result['Models'].append(model_result)
+        prediction_results.append(subject_result)
+
+    return prediction_results   
 
 def main():
 
@@ -2118,9 +3097,10 @@ def main():
     csv_only= False
     edf_only=False
     csv_test=False
+    all_predictions = defaultdict(lambda: defaultdict(list))
 
     for file_path in file_paths:
-        
+        print("Folder found:",file_paths)
         print(f"File found: {file_path}, with extension: {os.path.splitext(file_path)[1]}")
 
         # Determine the type of file and handle it accordingly
@@ -2154,153 +3134,20 @@ def main():
 
             
             if process_with_builtin_functions:
-                mat_contents = scipy.io.loadmat(file_path)
-                eeg_data = mat_contents.get('data')  # Replace 'data' with the actual key for data
-                labels = mat_contents.get('labels')  # Replace 'labels' with the actual key for labels
-                channel_names = [ "Fp1","GND", "Fp2","F7", "F3", "Fz", "F4", "F8",
-                                "FC5", "FC1", "FC2", "FC6",
-                                    "T3", "C3", "Cz", "C4","A1", "T4","A2"
-                                    , "CP5", "CP1", "CP2","Ref", "CP6", "T5",
-                                    "P3", "Pz", "P4", "T6", "PO3","PO4", "O1", "Oz", "O2"]
+                raw, sfreq, labels = read_mat_eeg(file_path)
+                preprocessed_raw, preprocessing_steps = preprocess_raw_eeg(raw, 250, subject_identifier)
+                features_message, features_df = extract_features_csp(preprocessed_raw, sfreq, labels)
+
                 
-
-                if eeg_data is not None and labels is not None:
-                    labels = labels.flatten()
-
-                    eeg_data_filtered = np.array([bandPassFilter(trial, sampleRate=250, highpass=1, lowpass=40, order=2) for trial in eeg_data])
-
-                    # Initialize the custom EEG data transformer
-                    eeg_to_df_transformer = EEGToDataFrame()
-                    
-                    # Convert EEG data into DataFrame for tsfresh
-                    eeg_data_df = eeg_to_df_transformer.transform(eeg_data_filtered)
-                    print("EEG column:",eeg_data_df.columns)
-                    
-                    print('Number of samples after EEGToDataFrame:', eeg_data_df.shape[0])
-
-                    data_as_array = eeg_data_df.values.T  # Assuming eeg_data_df is in the correct shape
-                    info = mne.create_info(ch_names=channel_names, sfreq=250, ch_types='eeg')
-                    raw = mne.io.RawArray(data_as_array, info)
-
-                    extraction_settings = MinimalFCParameters()
-
-                    # Extract features using tsfresh
-                    # You should not get a TypeError if you use the function correctly
-                    extracted_features = extract_features(eeg_data_df, column_id='id', column_sort='time', default_fc_parameters=extraction_settings)
-                    
-                    
-                    # Impute missing values
-                    imputed_features = impute(extracted_features)
-
-                    
-                    print('Number of samples after extract_features:', extracted_features.shape[0])
-                    print('Number of samples after impute:', imputed_features.shape[0])
-                    
-                    final_labels = labels[imputed_features.index]
-
-                    print('Number of features before selection:', imputed_features.shape[1])
-                    # Select only relevant features based on the labels
-                    relevant_features = select_features(imputed_features, pd.Series(final_labels))
-                    print('Number of features after selection:', relevant_features.shape[1])
-                    
-
-                    print("Length label:", len(final_labels))
-
-
-                    # Split the data into training and testing sets
-                    X_train, X_test, y_train, y_test = train_test_split(imputed_features, final_labels, test_size=0.2, random_state=42)
-
-                    print("eeg_data_filtered shape:", eeg_data_filtered.shape)
-                    print("eeg_data_df shape:", eeg_data_df.shape)
-                    print("extracted_features shape:", extracted_features.shape)
-                    print("imputed_features shape:", imputed_features.shape)
-                    print("relevant_features shape:", relevant_features.shape)
-                    print("X_train shape:", X_train.shape)
-                    print("y_train shape:", y_train.shape)
-
-                    # Define a pipeline with modeling step only, as tsfresh has already done the scaling and feature selection
-                    pipeline = Pipeline([
-                        ('classifier', RandomForestClassifier())  # Modeling step
-                    ])
-
-                    # Train the model using the pipeline
-                    pipeline.fit(X_train, y_train)
-
-                    # Make predictions
-                    y_pred = pipeline.predict(X_test)
-
-                    accuracy = accuracy_score(y_test, y_pred)
-                    print(f"Random Accuracy for {subject_identifier}: {accuracy * 100:.2f}%")
-
-                    # Store the accuracy in accuracy_dict_rnd for RandomForestClassifier
-                    accuracy_dict_rnd[subject_identifier].append(accuracy)
-
-                    #SUPPORT VECTOR MACHINE
-
-                    pipeline_svc = Pipeline([
-                        ('classifier', SVC())  # Modeling step
-                    ])
-
-                    # Train the model using the pipeline
-                    pipeline_svc.fit(X_train, y_train)
-
-                    # Make predictions
-                    y_pred_svc = pipeline_svc.predict(X_test)
-
-                    accuracy_svc = accuracy_score(y_test, y_pred_svc)
-                    print(f"SVM Accuracy for {subject_identifier}: {accuracy_svc * 100:.2f}%")
-
-                    accuracy_dict_svc[subject_identifier].append(accuracy_svc)
-
-                    #GRADIENT CLASSIFICATION
-
-                    pipeline_gdn = Pipeline([
-                        ('classifier', GradientBoostingClassifier())  # Modeling step
-                    ])
-
-                    # Train the model using the pipeline
-                    pipeline_gdn.fit(X_train, y_train)
-
-                    # Make predictions
-                    y_pred_gdn = pipeline_gdn.predict(X_test)
-
-                    accuracy_gdn = accuracy_score(y_test, y_pred_gdn)
-                    print(f"Gradient Accuracy for {subject_identifier}: {accuracy_gdn * 100:.2f}%")
-
-                    accuracy_dict_gbc[subject_identifier].append(accuracy_gdn)
-
-                    #K-NN CLASSIFIER
-
-                    pipeline_knn = Pipeline([
-                        ('classifier', MLPClassifier(hidden_layer_sizes=(50,), max_iter=300, alpha=0.001,
-                    solver='sgd', random_state=21, tol=0.000000001))  # Modeling step
-                    ])
-
-                    # Train the model using the pipeline
-                    pipeline_knn.fit(X_train, y_train)
-
-                    # Make predictions
-                    y_pred_knn = pipeline_knn.predict(X_test)
-
-                    accuracy_knn = accuracy_score(y_test, y_pred_knn)
-                    print(f"KNN Accuracy for {subject_identifier}: {accuracy_knn * 100:.2f}%")
-
-                    accuracy_dict_knn[subject_identifier].append(accuracy_knn)
-
-
-                    # Store true labels and predictions
-                    all_true_labels.extend(y_test)
-                    all_predictions.extend(y_pred)
-
-                    if subject_identifier not in subject_data:
-                       subject_data[subject_identifier] = {'true_labels': [], 'predictions': []}
+                # Get predictions for the current file
+                predictions = predict_movement_svc(features_df,subject_identifier)
+                print("Predictions test",predictions)
                 
-                    # Append the true labels and predictions to the subject's entry in the dictionary
-                    subject_data[subject_identifier]['true_labels'].extend(y_test)
-                    subject_data[subject_identifier]['predictions'].extend(y_pred)
-                    
-                else:
-                    print(f"Data or labels could not be found in {file_path}. Please check the file structure.")
+                # Append predictions to the corresponding subject and session
+                # for model_name, model_predictions in predictions.items():
+                #     all_predictions[subject_identifier][model_name].extend(model_predictions)
+            
+           
             else:
                 raw_data, sfreq, labels = read_mat_eeg(file_path) # Handling .mat file 
                 
@@ -2316,7 +3163,8 @@ def main():
 
                 print(message)
                 
-                mat_modeling(subject_identifier,features_df,labels)
+                accuracy_test,label_sentence=mat_modeling_svc(subject_identifier,features_df,labels)
+                #print(label_sentence)
                 # if subject_identifier not in subject_data:
                 #         subject_data[subject_identifier] = {'features': pd.DataFrame(), 'labels': []}
                 # # Append features and labels to the subject's data
@@ -2362,8 +3210,8 @@ def main():
             print(f"Subject {subject} Accuracy SVC: {average_accuracy_dict_svc[subject] * 100:.2f}%")
             print(f"Subject {subject} Accuracy GradientBoosting: {average_accuracy_dict_gbc[subject] * 100:.2f}%")
             print(f"Subject {subject} Accuracy KNN: {average_accuracy_dict_knn[subject] * 100:.2f}%")
+    
 
-           
     # else:        
     # # This part should be outside (below) the for loop that goes through file_paths
 
@@ -2526,7 +3374,7 @@ def main():
     # else:
     if csv_only | edf_only:        
        #csv_modeling()
-       csv_svc_model()
+       csv_svc_model(label_conditions_path)
     # else:
     #     label_conditions = read_label_conditions(conditions_file)
     #     conditions = load_and_predict_random(all_features, label_conditions)

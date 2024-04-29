@@ -21,13 +21,16 @@ from scipy.signal import butter, sosfiltfilt
 #from sklearn.metrics import accuracy_score
 
 def importfiles(file_paths):
+    '''
     allf = []
     feat = []
     for path in file_paths:
         headers = []
-        feat, headers = loadData(path)
+        eegData, labels= loadData(path)
+        feat, headers = features(eegData, labels)
         allf.append(pd.DataFrame(feat))
-    extract_features(allf, headers)
+    '''
+    extract_features(file_paths)
 
 def loadData(fileName):
 
@@ -36,7 +39,8 @@ def loadData(fileName):
             mat = scipy.io.loadmat(fileName)
             eegData = mat['data']
             label = mat['labels']
-            return features(eegData,label)
+            return eegData, label
+            #return features(eegData,label)
         except ImportError:
             print('Library Error', 'scipy is required to load MAT data.')
             return None
@@ -112,25 +116,39 @@ def allfeatures(FS, headers, csv_path):
     return csvpath
 
 subbands = [(0.5, 4), (4, 8), (8, 12), (12, 30), (30, 100)]
+
 def filtering(data, fs, lowcut, highcut, order=5):
     nyquist = 0.5 * fs
     low = lowcut / nyquist
     high = highcut / nyquist
     sos = butter(order, [low, high], analog=False, btype='band', output='sos')
-    filtered_data = sosfiltfilt(sos, data, axis=-1)
+    
+    samples, channels, trials = data.shape
+    data_2d = np.reshape(data, (samples * channels, trials))
+
+    filtered_data_2d = sosfiltfilt(sos, data_2d, axis=-1)
+
+    filtered_data = np.reshape(filtered_data_2d, (samples, channels, trials))
+    
     return filtered_data
 
-def extract_features(eegData, labels):
-    allfeatures(eegData, labels, 'allfeatures.csv')
-    '''
+def extract_features(file_paths):
+    allf = []
+    feat = []
+    for path in file_paths:
+        headers = []
+        eegData, labels = loadData(path)
+        feat, headers = features(eegData, labels)
+        allf.append(pd.DataFrame(feat))
     for band_idx, (lowcut, highcut) in enumerate(subbands, start=1):
         subfeatures = []
-        for df in eegData:
-            filtered_data = filtering(df, fs=500, lowcut=lowcut, highcut=highcut)
+        for path in file_paths:
+            eegData, labels = loadData(path)
+            filtered_data = filtering(eegData, fs=500, lowcut=lowcut, highcut=highcut)
             subband_features, subband_headers = features(filtered_data, labels)
             subfeatures.append(pd.DataFrame(subband_features))
         csv_path = f'subband_{band_idx}_features.csv'
-        allfeatures(subfeatures, subband_headers, csv_path)
-    
-    return subband_features, subband_headers, csv_path
-    '''
+        allfeatures(subfeatures, headers, csv_path)
+
+    allfeatures(allf, headers, 'allfeatures.csv')
+    return csv_path

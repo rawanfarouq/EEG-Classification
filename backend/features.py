@@ -16,21 +16,6 @@ import threading
 import queue
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from scipy.signal import butter, sosfiltfilt
-#from sklearn.model_selection import train_test_split
-#from sklearn.svm import SVC
-#from sklearn.metrics import accuracy_score
-
-def importfiles(file_paths):
-    '''
-    allf = []
-    feat = []
-    for path in file_paths:
-        headers = []
-        eegData, labels= loadData(path)
-        feat, headers = features(eegData, labels)
-        allf.append(pd.DataFrame(feat))
-    '''
-    extract_features(file_paths)
 
 def loadData(fileName):
 
@@ -40,7 +25,6 @@ def loadData(fileName):
             eegData = mat['data']
             label = mat['labels']
             return eegData, label
-            #return features(eegData,label)
         except ImportError:
             print('Library Error', 'scipy is required to load MAT data.')
             return None

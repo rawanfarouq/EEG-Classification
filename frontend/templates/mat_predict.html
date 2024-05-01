@@ -280,10 +280,38 @@
                 });
 
                 predictionHTML += `</div></div>`;
+
+                            
             });
+            var goBackButton = document.createElement('button');
+                goBackButton.textContent = 'Go back for selecting other model';
+                goBackButton.style.marginTop = '20px';
+                goBackButton.style.padding = '10px 15px';
+                goBackButton.style.border = 'none';
+                goBackButton.style.borderRadius = '4px';
+                goBackButton.style.backgroundColor = '#007bff';
+                goBackButton.style.color = 'white';
+                goBackButton.style.cursor = 'pointer';
+                goBackButton.addEventListener('click', function() {
+                // Set a flag in session storage indicating that the loading process has started
+                sessionStorage.setItem('loadingStatus', 'started');
+                sessionStorage.setItem('loadingMessage', 'Loading, please wait...');
+                document.getElementById('predictButton').innerHTML = "<p>Loading, please wait...</p>";
+                // Redirect to the CSV page
+                window.location.href = '/mat_classification';
+
+                // Make the asynchronous call to the csv_features function
+                fetch('{{ url_for("file_reader.mat_classification") }}', {
+            method: 'POST',
+        })
+
+            
+                }); 
                         
                             // Set the innerHTML of the predictionMessage to include all subjects' predictions
                             document.getElementById('predictionMessage').innerHTML = predictionHTML;
+                            document.getElementById('predictionMessage').appendChild(goBackButton);
+
                         }
                 }).catch(function(error) {
                     console.error('Error:', error);

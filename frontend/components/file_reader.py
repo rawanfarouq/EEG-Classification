@@ -18,8 +18,8 @@ print("Backend directory:", backend_dir)
 # Add the backend directory to the sys.path
 sys.path.insert(0, backend_dir)
 
-from backend.classification import read_eeg_file, read_edf_eeg, read_mat_eeg, csv_identification,processed_data_keywords,csv_modeling,preprocess_raw_eeg,extract_features_csp,mat_modeling,get_label_text,read_label_conditions
-from backend.classification import csv_svc_model,csv_random_model,csv_logistic_model,csv_knn_model,csv_cnn_model,load_and_predict_svc,load_and_predict_random,load_and_predict_knn,load_and_predict_cnn,load_and_predict_logisitc,csv_features
+from backend.classification import read_eeg_file, read_edf_eeg, read_mat_eeg, csv_identification,processed_data_keywords,csv_svc_model,preprocess_raw_eeg,extract_features_csp,mat_modeling,get_label_text,read_label_conditions
+from backend.classification import csv_svc_model_new,csv_random_model,csv_logistic_model,csv_knn_model,csv_cnn_model,load_and_predict_svc,load_and_predict_random,load_and_predict_knn,load_and_predict_cnn,load_and_predict_logisitc,csv_features,predict_on_training_data
 from backend.classification import mat_modeling_svc,mat_modeling_random,mat_modeling_logistic,mat_modeling_knn,mat_modeling_cnn,predict_movement,predict_movement_svc,predict_movement_random,predict_movement_logistic,predict_movement_knn,predict_movement_cnn
 from backend.features import importfiles
 
@@ -67,6 +67,9 @@ def upload():
                     elif extension =='txt':
                         file_path_label_original.append(file_path)
                         session['file_path_label_original']=file_path_label_original
+                        label_conditions_in_predict_train = read_label_conditions(file_path)
+                        session['label_conditions_in_predict_train']=label_conditions_in_predict_train
+                        print("label_conditions_in_predict_train",label_conditions_in_predict_train)
 
                     elif extension == 'edf':
                         raw, sfreq = read_edf_eeg(file_path)
@@ -166,7 +169,7 @@ def calculate_svc():
             raise ValueError("No label conditions file found.")
 
         print("labels_original", labels_original)
-        accuracies, results, labels_array_original = csv_svc_model(labels_original)
+        accuracies, results, labels_array_original = csv_svc_model_new(labels_original)
         session['labels_array_original'] = labels_array_original
         
         return jsonify({
@@ -298,7 +301,7 @@ def mat_classification():
             session['subject_identifier'] = subject_identifier
             session['labels'] = labels
             # Clear the stored file paths after processing
-            session.pop('mat_file_paths', None)
+            # session.pop('mat_file_paths', None)
             # Retrieve preprocessing steps from session
             #preprocessing_steps = session.get('preprocessing_steps', [])
             # Store the collected preprocessing steps in the session
@@ -537,6 +540,7 @@ def predictions():
                     elif extension in {'txt'}:
                         label_conditions = read_label_conditions(file_path)  # Updated to use the existing function
                         session['label_conditions']=label_conditions
+
                     else:
                         raise ValueError("Unsupported file type")
                 except ValueError as e:
@@ -634,7 +638,31 @@ def predict():
     except Exception as e:
         print(traceback.format_exc())
     # Return a more detailed error message to the client
-        return jsonify({'error': 'Internal Server Error', 'details': str(e)}), 500    
+        return jsonify({'error': 'Internal Server Error', 'details': str(e)}), 500   
+
+
+
+
+@bp_file_reader.route('/perform_predict_on_training_data', methods=['POST'])
+def perform_predict_on_training_data():
+    data = request.get_json()
+    model_name = data.get('model')
+
+    try:
+        # Assuming you have a function that handles the training and prediction on training data
+        label_conditions = session.get('label_conditions_in_predict_train', {})
+        print("label condition in predict train:",label_conditions)
+        formatted_predictions_train, result_predict_train = predict_on_training_data(model_name, label_conditions)
+        return jsonify({
+            'status': 'success',
+            'formatted_predictions_train': formatted_predictions_train,
+            'result_predict_train': result_predict_train
+            })
+    
+        
+    except Exception as e:
+        print(traceback.format_exc())
+        return jsonify({'status': 'error', 'details': str(e)}), 500     
     
 @bp_file_reader.route('/mat_predict', methods=['GET', 'POST'])
 def mat_predict():

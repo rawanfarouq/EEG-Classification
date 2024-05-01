@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <title>Prediction File Reader</title>
     <style>
         body {
@@ -10,86 +11,322 @@
             margin: 0;
             padding: 0;
             background-color: #f0f0f0;
-            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
         h1 {
-            text-align: center;
             color: #333;
-            margin-top: 70px;
+            margin-bottom: 20px;
         }
-        form {
+        form, .predict-button-container {
             width: 300px;
-            margin: auto;
-            margin-top: 140px;
             background-color: #fff;
-            padding: 40px;
+            padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
             text-align: center;
+            margin-bottom: 20px;
         }
-        label {
+        label, .predict-button-container {
             display: block;
             margin-bottom: 10px;
         }
-        input[type="file"] {
+        input[type="file"], input[type="button"], input[type="submit"] {
             width: 100%;
             padding: 10px;
             margin-bottom: 20px;
             border: 1px solid #ccc;
             border-radius: 4px;
             box-sizing: border-box;
-        }
-        input[type="submit"] {
-            width: 100%;
-            background-color: #4CAF50;
-            color: white;
-            padding: 14px 20px;
-            margin: 8px 0;
-            border: none;
-            border-radius: 4px;
             cursor: pointer;
         }
-        input[type="submit"]:hover {
+        input[type="submit"], input[type="button"] {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+        }
+        input[type="submit"]:hover, input[type="button"]:hover {
             background-color: #45a049;
         }
         #predictionResults {
-            margin-top: 40px;
             text-align: center;
+            width: 80%;
         }
         #predictionsDisplay {
             background-color: #fff;
             border-radius: 8px;
             padding: 20px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            margin: auto;
-            width: 80%;
+            margin-top: 20px;
         }
         #predictionsDisplay p {
             margin: 10px 0;
         }
+        #alertBox {
+            color: red;
+            margin-top: 20px;
+        }
+        .predict-button-container {
+            margin-top: 20px;
+        }
+        .predictions-container {
+            display: flex;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+        .predictions-list, .metrics-container {
+            flex: 1; /* Take up equal space */
+            min-width: 250px; /* Minimum width */
+            margin: 10px;
+        }
+        .predictions-list ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .predictions-list li {
+            background-color: #f9f9f9;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+        .predictions-list li:last-child {
+            border-bottom: none;
+        }
+        .metrics-container p {
+            font-weight: bold;
+        }
+        #predictionOptions {
+            display: none;
+            margin-top: 20px;
+            text-align: center;
+        }
+        #predictionOptions label {
+            margin-right: 10px;
+        }
+        #predictionOptions select {
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            margin-right: 10px;
+        }
+        #displayPredictionsBtn {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #displayPredictionsBtn:hover {
+            background-color: #45a049;
+        }
+
+        /* Style adjustments for predictions list */
+        .predictions-list li {
+            background-color: #f9f9f9; /* Slight background for each list item */
+            border-radius: 4px; /* Rounded borders for list items */
+            margin-top: 5px; /* Space between list items */
+            transition: background-color 0.3s; /* Transition for hover effect */
+        }
+        .predictions-list li:hover {
+            background-color: #e9e9e9; /* Hover effect for list items */
+        }
+        .container {
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
-    <h1>Prediction File Reader</h1>
-    <form action="/predictions" method="POST" enctype="multipart/form-data">
-        <label for="file_path">Upload your EEG folder:</label><br>
-        <input type="file" id="file_path_predict" name="file_path_predict" webkitdirectory directory multiple required><br>
-        <input type="submit" value="Submit">
-    </form>
+    <div class="container text-center">
+        <h1 class="mb-4">Prediction File Reader</h1>
+        <div id="fileUploadForm">
+            <form action="/predictions" method="POST" enctype="multipart/form-data" class="mb-3">
+                <div class="form-group">
+                    <label for="file_path_predict" class="h5">Upload your EEG folder:</label>
+                    <input type="file" id="file_path_predict" name="file_path_predict" class="form-control-file" webkitdirectory directory multiple required>
+                </div>
+                <button type="submit" class="btn btn-success">Submit</button>
+            </form>
+            <button id="predictOnTrainingData" class="btn btn-primary mb-3">Predict on Training Data</button>
+        </div>
+        <div id="predictionOptions" class="mb-3" style="display:none;">
+            <label for="numPredictions" class="h5">Display how many predictions?</label>
+            <select id="numPredictions" class="custom-select d-inline-block w-auto mr-2">
+                <!-- Options will be dynamically added here -->
+            </select>
+            <button id="displayPredictionsBtn" class="btn btn-info">Display Predictions</button>
+            <button id="goBackBtn" class="btn btn-secondary ml-2">Go back Uploading New Data</button>
 
-    <!-- Prediction Results Placeholder -->
-    <div id="predictionResults" style="display:none;">
-        <h2>Predictions:</h2>
-        <div id="predictionsDisplay"></div>
+        </div>
+        <div id="predictionResults" class="predictions-container" style="display:none;">
+            <h2 class="w-100">Predictions:</h2>
+            <div id="predictionsDisplay" class="predictions-list"></div>
+        </div>
+        <div id="alertBox" class="alert alert-danger" role="alert" style="display:none;"></div>
     </div>
-
-    <!-- Add this div to your upload.html where you want the alerts to appear -->
-    <div id="alertBox"></div>
     
-     
-
 
     <script>
+
+document.getElementById('predictOnTrainingData').addEventListener('click', function () {
+    
+        document.getElementById('predictionOptions').style.display = 'block';
+        removeFileUploader();
+        const modelName = sessionStorage.getItem('selectedModel');
+        fetch('/perform_predict_on_training_data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ model: modelName })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Received data:', data); // Log the data to console
+            if (data.status === 'success') {
+                preparePredictionOptions(data.formatted_predictions_train.length);
+                sessionStorage.setItem('predictionsData', JSON.stringify(data)); // Store data in sessionStorage
+            } else {
+                throw new Error('Failed to predict on training data');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            displayError(error);
+        });
+    });
+
+    // Event listener for the Go back button
+document.getElementById('goBackBtn').addEventListener('click', function() {
+    // Show the file upload form again
+    document.querySelector('form').style.display = 'block';
+    // Hide the prediction options
+    document.getElementById('predictionOptions').style.display = 'none';
+});
+
+    function preparePredictionOptions(totalPredictions) {
+        // Show the prediction options
+        var predictionOptions = document.getElementById('predictionOptions');
+
+        if (predictionOptions) {
+        var numPredictionsSelect = document.getElementById('numPredictions');
+        numPredictionsSelect.innerHTML = ''; // Clear previous options
+
+        // Populate the select dropdown with options
+        var allOption = document.createElement('option');
+        allOption.value = 'all';
+        allOption.textContent = 'All';
+        numPredictionsSelect.appendChild(allOption);
+
+        // Add options for 10, 20, 30, ... predictions
+        for (var i = 10; i <= totalPredictions; i += 10) {
+            var option = document.createElement('option');
+            option.value = i;
+            option.textContent = i;
+            numPredictionsSelect.appendChild(option);
+        }
+
+        predictionOptions.style.display = 'block';
+
+        // Add event listener for Display Predictions button
+        document.getElementById('displayPredictionsBtn').addEventListener('click', function() {
+            var selectedValue = numPredictionsSelect.value;
+            var data = JSON.parse(sessionStorage.getItem('predictionsData'));
+            displayPredictions_train(data, selectedValue);
+        });
+    }
+    else{
+        console.error('Prediction options elements not found on page.');
+
+    }
+    }
+
+        
+
+    function displayPredictions_train(data, displayCount) {
+    var predictionsDisplay = document.getElementById('predictionsDisplay');
+    predictionsDisplay.innerHTML = ''; // Clear previous content
+
+    // Determine the number of predictions to display
+    var count = displayCount === 'all' ? data.formatted_predictions_train.length : parseInt(displayCount);
+
+    // Create a container for predictions and metrics
+    var predictionsContainer = document.createElement('div');
+    predictionsContainer.className = 'predictions-container';
+
+    // Display formatted predictions for training data
+    var predictionsList = document.createElement('div');
+    predictionsList.className = 'predictions-list';
+    var list = document.createElement('ul');
+
+    for (var i = 0; i < count; i++) {
+        var listItem = document.createElement('li');
+        listItem.textContent = data.formatted_predictions_train[i];
+        list.appendChild(listItem);
+    }
+
+    predictionsList.appendChild(list);
+    predictionsContainer.appendChild(predictionsList);
+
+    // Display prediction metrics like accuracy, precision, recall, and F1 score
+    if (data.result_predict_train) {
+        var metricsContainer = document.createElement('div');
+        metricsContainer.className = 'metrics-container';
+
+        var accuracy = document.createElement('p');
+        var precision = document.createElement('p');
+        var recall = document.createElement('p');
+        var f1Score = document.createElement('p');
+
+        accuracy.textContent = `Accuracy: ${data.result_predict_train.Accuracy[0]}%`;
+        precision.textContent = `Precision: ${data.result_predict_train.Precision[0]}%`;
+        recall.textContent = `Recall: ${data.result_predict_train.Recall[0]}%`;
+        f1Score.textContent = `F1 Score: ${data.result_predict_train['F1 Score'][0]}%`;
+
+        metricsContainer.appendChild(accuracy);
+        metricsContainer.appendChild(precision);
+        metricsContainer.appendChild(recall);
+        metricsContainer.appendChild(f1Score);
+
+        predictionsContainer.appendChild(metricsContainer);
+
+        var goBackButton = document.createElement('button');
+        goBackButton.textContent = 'Go back for selecting other model';
+        goBackButton.style.marginTop = '20px';
+        goBackButton.style.padding = '10px 15px';
+        goBackButton.style.border = 'none';
+        goBackButton.style.borderRadius = '4px';
+        goBackButton.style.backgroundColor = '#007bff';
+        goBackButton.style.color = 'white';
+        goBackButton.style.cursor = 'pointer';
+        goBackButton.addEventListener('click', function() {
+        // Set a flag in session storage indicating that the loading process has started
+        sessionStorage.setItem('loadingStatus', 'started');
+        sessionStorage.setItem('loadingMessage', 'Loading, please wait...');
+        document.getElementById('predictionsDisplay').innerHTML = "<p>Loading, please wait...</p>";
+        // Redirect to the CSV page
+        window.location.href = '/csv';
+
+        // Make the asynchronous call to the csv_features function
+        fetch('/csv_features', { method: 'POST' });
+
+    
+        });              
+        predictionsDisplay.appendChild(goBackButton);
+    }
+
+    predictionsDisplay.appendChild(predictionsContainer);
+
+    // Make sure to display the predictionResults div if it was previously hidden
+    document.getElementById('predictionResults').style.display = 'block';
+}
+
+
+        function removeFileUploader() {
+            document.querySelector('form').style.display = 'none';
+        }
         
         document.querySelector('form').addEventListener('submit', function (event) {
     event.preventDefault();
@@ -239,6 +476,14 @@ function removeFileUploader() {
     document.querySelector('form').style.display = 'none';
 }
     </script>
+
+     <!-- Include Bootstrap's JavaScript -->
+   <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/popper.js@1.7.12/umd/popper.min.js"></script>
+   <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+   <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+
 
 
 </body>

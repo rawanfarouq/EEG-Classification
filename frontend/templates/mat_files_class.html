@@ -116,6 +116,8 @@
         <button id="fetchAccuracyButton" class="btn btn-info my-2" onclick="fetchModelAccuracy()">Get Accuracy</button>
     </div>
     <button id="predictButton" class="btn btn-warning my-2" onclick="redirectToPredictPage()" style="display: none;">Predict</button>
+    <div id="alertBox" class="alert" style="display:none;"></div> <!-- Make sure this element exists -->
+
 
 
 <div id="stepsContainer">
@@ -136,6 +138,31 @@
 </div>
 
 <script>
+    document.addEventListener("DOMContentLoaded", function() {
+        var loadingStatus = sessionStorage.getItem('loadingStatus');
+
+        if (loadingStatus === 'started') {
+            // Display the initial loading message
+            var alertBox = document.getElementById('alertBox');
+            alertBox.textContent = sessionStorage.getItem('loadingMessage');
+            alertBox.style.display = 'block';
+
+            // Wait for 10 seconds before updating the message
+            setTimeout(function() {
+                alertBox.textContent = 'Data loaded. You can now Reprocess and choose a model.';
+
+                // Wait for an additional 2 seconds before removing the alert
+                setTimeout(function() {
+                    alertBox.style.display = 'none'; // Hide the alert box
+                    // Clear the session storage flags
+                    sessionStorage.removeItem('loadingStatus');
+                    sessionStorage.removeItem('loadingMessage');
+                }, 5000); // 5000 milliseconds = 5 seconds
+
+            }, 20000); // 20000 milliseconds = 20 seconds
+        }
+    });
+
     var preprocessingStepsFetched = false;
     var modelingPerformed = false;
     var fetchedPreprocessingSteps = [];

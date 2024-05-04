@@ -58,7 +58,7 @@ from joblib import dump, load
 import stat
 
 downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-dataverse_files_folder = os.path.join(downloads_folder, "matsub2")  # Combine with the folder name
+dataverse_files_folder = os.path.join(downloads_folder, "mat2")  # Combine with the folder name
 
 # Use glob to get a list of file paths matching a specific pattern
 file_paths = glob(os.path.join(dataverse_files_folder, '*.*'))  # Getting all files with any extension 
@@ -142,6 +142,7 @@ trial_labels_sentences_array = []
 labels_array = [] 
 result_predict_train=[]
 accuracy_rf=0
+all_subjects_predictions = []
 
 # for file_path in file_paths:
 #     filename = os.path.basename(file_path)  # Extract the filename from the file path
@@ -2550,6 +2551,7 @@ def mat_modeling_svc(subject_identifier, features_df, labels):
         for clf_name, clf in classifiers.items():
             clf.fit(X_scaled, y)
             model_path = os.path.join(model_directory_mat, f'{clf_name.lower().replace(" ", "_")}_model.joblib')
+            print("Model path name:",model_path)
             dump(clf, model_path)
 
         for clf_name, clf in classifiers.items():
@@ -2575,6 +2577,84 @@ def mat_modeling_svc(subject_identifier, features_df, labels):
             print(accuracy_message)
     #print(trial_labels_sentences_array)
     return accuracy_mat_svc,trial_labels_sentences_array
+
+
+def train_test_split_models(subject_identifier, features_df, labels, model_name, test_size=0.2):
+
+    if len(features_df) > len(labels):
+        print(f"Trimming features from {len(features_df)} to match labels count: {len(labels)}")
+        features_df = features_df.iloc[:len(labels), :]
+    
+    # Split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(
+        features_df.iloc[:, :-1],  # Features: all columns except the last
+        labels,  # Labels: the last column
+        test_size=test_size,  # Percentage of data to use as the test set
+    )
+
+    # Standardize the features
+    scaler = StandardScaler().fit(X_train)
+    X_train_scaled = scaler.transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    # Fit LabelEncoder on the training labels and transform both train and test labels
+    label_encoder = LabelEncoder()
+    y_train_encoded = label_encoder.fit_transform(y_train)
+    y_test_encoded = label_encoder.transform(y_test)
+
+    # Define the model file name based on the model_name parameter
+    model_file_mapping = {
+        'svc': 'svc_model.joblib',
+        'random': 'randomforest_model.joblib',
+        'logistic':'logistic_regression_model.joblib',
+        'knn': 'knn_model.joblib',
+        'cnn': 'cnn_model.h5',
+
+    }
+
+    # Get the file name for the specific model
+    model_file_name = model_file_mapping.get(model_name)
+
+    if not model_file_name:
+        raise ValueError("Invalid model name provided.")
+
+    # Define the path to the model file
+    model_directory_mat = 'saved_models_mat'
+    model_path = os.path.join(model_directory_mat, model_file_name)
+
+    # Load the selected model and make predictions
+    if model_name == 'cnn':  # Keras model has a different file extension
+        model = load_model(model_path)
+        # Reshape the data for CNN
+        X_test_reshaped = X_test_scaled.reshape((X_test_scaled.shape[0], X_test_scaled.shape[1], 1))
+        predictions = model.predict(X_test_reshaped)
+        y_pred_encoded = np.argmax(predictions, axis=1)
+    else:  # Sklearn models
+        model = load(model_path)
+        y_pred_encoded = model.predict(X_test_scaled)
+
+    # Calculate accuracy
+    test_accuracy = accuracy_score(y_test_encoded, y_pred_encoded)
+
+    # Translate the encoded labels back into the original label descriptions
+    label_descriptions = label_encoder.classes_
+    y_pred_descriptions = label_descriptions[y_pred_encoded]
+    y_test_descriptions = label_descriptions[y_test_encoded]
+
+    # Prepare the predictions info
+    all_subjects_predictions = []
+    for true, pred in zip(y_test_descriptions, y_pred_descriptions):
+        correctness = "Correct" if true == pred else "Wrong"
+        prediction_info = {
+            'subject_identifier': subject_identifier,
+            'actual_label': true,
+            'predicted_label': pred,
+            'correctness': correctness
+        }
+        all_subjects_predictions.append(prediction_info)
+
+    # Return the collection of predictions for all subject_identifiers
+    return all_subjects_predictions
 
 def mat_modeling_random(subject_identifier,features_df,labels):
     subject_scores = defaultdict(lambda: defaultdict(list))
@@ -3343,7 +3423,7 @@ def main():
     
     
 
-    process_with_builtin_functions = True   #Toggling
+    process_with_builtin_functions = False   #Toggling
     proces_with_builtin_accuracy= False
     csv_only= False
     edf_only=False
@@ -3415,6 +3495,11 @@ def main():
                 print(message)
                 
                 accuracy_test=mat_modeling_svc(subject_identifier,features_df,labels)
+                predictions_info = train_test_split_models(subject_identifier, features_df,model_name='svc' ,labels=labels)
+                print(predictions_info)
+                # for info in predictions_info:
+                #     print(info)
+                #print(f"Test accuracy: {test_accuracy * 100:.2f}%")
                 #print(label_sentence)
                 # if subject_identifier not in subject_data:
                 #         subject_data[subject_identifier] = {'features': pd.DataFrame(), 'labels': []}

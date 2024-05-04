@@ -54,6 +54,8 @@
                     <input type="file" class="form-control-file" id="file_path_upload" name="file_path_upload" webkitdirectory directory multiple required>
                 </div>
                 <button type="submit" class="btn btn-success btn-block">Upload</button>
+                <button type="button" id="predictTrainingButton" class="btn btn-primary btn-block mt-2">Predict on Training Data</button>
+
             </form>
         </div>
         <div id="alertBox"></div>
@@ -64,16 +66,20 @@
         <button id="extractFeaturesButton" class="btn btn-primary mt-3" style="display:none;">Extract Features</button>
         <div id="featuresMessage" class="mt-3"></div>
         <button id="predictButton" class="btn btn-primary mt-3" style="display:none;">Prediction</button>
+        
         <div id="predictionMessage" class="mt-3"></div>
+        
 
     </div>
 
     
 
    <script>
+    
     var preprocessButtonClicked = false; // Flag to track button state
     var preprocessingStepsFetched = false; // Flag to track whether preprocessing steps are fetched
     var extractFeaturesFetched = false; // Flag to track whether features are fetched
+    
 
     document.addEventListener('DOMContentLoaded', (event) => {
     var urlParams = new URLSearchParams(window.location.search);
@@ -82,6 +88,108 @@
         // Store the model name in session or local storage for later use in prediction
         sessionStorage.setItem('selectedModelName', model);
     }
+});
+
+document.getElementById('predictTrainingButton').addEventListener('click', function() {
+    var selectedModelName = sessionStorage.getItem('selectedModelName');
+    if (!selectedModelName) {
+        document.getElementById('predictionMessage').innerHTML = `<div class="alert alert-danger" role="alert">No model selected.</div>`;
+        return;
+    }
+    fetch('/perform_train_test_mat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ model: selectedModelName }) // Corrected the key to 'model' instead of 'model_name'
+    }).then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok ' + response.statusText);
+        }
+        return response.json(); // Only call .json() once
+    }).then(data => {
+    console.log(data); // Log the data for debugging purposes
+
+    // Check if the server operation was successful
+    if (data.status === 'success') {
+        console.log("data is good");
+        // Assuming 'all_subjects_predictions' contains an array of prediction results
+        if (data.all_subjects_predictions && data.all_subjects_predictions.length > 0) {
+            let predictionsBySubject = {};
+            data.all_subjects_predictions.forEach(prediction => {
+                let subject = prediction.subject_identifier.split('_')[0];  // e.g., 'sub-005'
+                let session = prediction.subject_identifier.split('_')[1];  // e.g., 'ses-03'
+
+                if (!predictionsBySubject[subject]) {
+                    predictionsBySubject[subject] = {};
+                }
+
+                if (!predictionsBySubject[subject][session]) {
+                    predictionsBySubject[subject][session] = [];
+                }
+
+                predictionsBySubject[subject][session].push(prediction);
+            });
+
+            let resultsContent = '';
+            for (let subject in predictionsBySubject) {
+                let sessions = Object.keys(predictionsBySubject[subject]);
+                let tabsContent = '';
+                let tabPanesContent = '';
+
+                // Create the tabs and content for each session
+                sessions.forEach((session, index) => {
+                    let isActive = index === 0 ? 'active' : '';
+                    tabsContent += `<li class="nav-item"><a class="nav-link ${isActive}" id="tab-${subject}-${session}" data-toggle="tab" href="#pane-${subject}-${session}" role="tab">${session}</a></li>`;
+                    
+                    let sessionPredictionsList = predictionsBySubject[subject][session].map((pred, predIndex) => {
+                        return `<div>${predIndex + 1}. Actual: ${pred.actual_label}<br> - Predicted: ${pred.predicted_label} (${pred.correctness})</div>`;
+                    }).join('');
+
+                    tabPanesContent += `<div class="tab-pane ${isActive}" id="pane-${subject}-${session}" role="tabpanel">${sessionPredictionsList}</div>`;
+                });
+
+                // Construct the card with tabs for each subject
+                resultsContent += `
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">${subject}</h5>
+                        </div>
+                        <div class="card-body">
+                            <ul class="nav nav-tabs" role="tablist">${tabsContent}</ul>
+                            <div class="tab-content">${tabPanesContent}</div>
+                        </div>
+                    </div>
+                `; }
+                document.getElementById('predictionMessage').innerHTML = resultsContent;
+            // Activate Bootstrap tabs functionality
+            $('.nav-tabs a').click(function(e) {
+                e.preventDefault();
+                $(this).tab('show');
+            });
+
+        } else {
+            document.getElementById('predictionMessage').innerHTML = `
+                <div class="alert alert-warning" role="alert">
+                    No predictions were made.
+                </div>
+            `;
+        }
+    } else {
+        // If the operation was not successful, display the error message from the server
+        document.getElementById('predictionMessage').innerHTML = `
+            <div class="alert alert-danger" role="alert">
+                Error: ${data.details}
+            </div>
+        `;
+    }
+}).catch(error => {
+    // Handle any errors that occurred during the fetch operation
+    console.error('Error:', error);
+    document.getElementById('predictionMessage').innerHTML = `
+        <div class="alert alert-danger" role="alert">
+            Error: ${error.message}
+        </div>
+    `;
+});
 });
 
     document.getElementById('uploadForm').addEventListener('submit', function(event) {

@@ -18,7 +18,7 @@ print("Backend directory:", backend_dir)
 # Add the backend directory to the sys.path
 sys.path.insert(0, backend_dir)
 
-from backend.classification import read_eeg_file, read_edf_eeg, read_mat_eeg, csv_identification,processed_data_keywords,csv_svc_model,preprocess_raw_eeg,extract_features_csp,mat_modeling,get_label_text,read_label_conditions
+from backend.classification import read_eeg_file, read_edf_eeg, read_mat_eeg, csv_identification,processed_data_keywords,csv_svc_model,preprocess_raw_eeg,extract_features_csp,mat_modeling,get_label_text,read_label_conditions,train_test_split_models
 from backend.classification import csv_svc_model_new,csv_random_model,csv_logistic_model,csv_knn_model,csv_cnn_model,load_and_predict_svc,load_and_predict_random,load_and_predict_knn,load_and_predict_cnn,load_and_predict_logisitc,csv_features,predict_on_training_data
 from backend.classification import mat_modeling_svc,mat_modeling_random,mat_modeling_logistic,mat_modeling_knn,mat_modeling_cnn,predict_movement,predict_movement_svc,predict_movement_random,predict_movement_logistic,predict_movement_knn,predict_movement_cnn
 from backend.features import extract_features
@@ -29,6 +29,9 @@ def upload():
     print("Entered upload")
     session.pop('csv_messages', None)
     file_path_feature=[]
+    # Initialize the accuracies dictionary if it doesn't exist
+    if 'model_accuracies' not in session:
+        session['model_accuracies'] = {}
 
     if request.method == "POST":
         files = request.files.getlist('file_path_upload')
@@ -170,6 +173,14 @@ def calculate_svc():
 
         print("labels_original", labels_original)
         accuracies, results, labels_array_original = csv_svc_model_new(labels_original)
+
+        accuracy_value = results['Accuracy']
+        if isinstance(accuracy_value, list):
+            # If the accuracy is a list, take the first element or perform other logic to get a single value
+            accuracy_value = accuracy_value[0]
+        #Store the accuracy, so you can get the highest accuracy
+        session['model_accuracies']['SVC'] = accuracy_value
+
         session['labels_array_original'] = labels_array_original
         
         return jsonify({
@@ -191,6 +202,14 @@ def calculate_random():
 
         print("labels_original", labels_original)
         accuracies, results, labels_array_original = csv_random_model(labels_original)
+
+        accuracy_value = results['Accuracy']
+        if isinstance(accuracy_value, list):
+            # If the accuracy is a list, take the first element or perform other logic to get a single value
+            accuracy_value = accuracy_value[0]
+        #Store the accuracy, so you can get the highest accuracy
+        session['model_accuracies']['Random'] = accuracy_value
+
         session['labels_array_original'] = labels_array_original
         print("labels in random:",labels_array_original)
         return jsonify({
@@ -209,6 +228,15 @@ def calculate_logistic():
 
         print("labels_original", labels_original)
         accuracies, results, labels_array_original = csv_logistic_model(labels_original)
+
+        accuracy_value = results['Accuracy']
+        if isinstance(accuracy_value, list):
+            # If the accuracy is a list, take the first element or perform other logic to get a single value
+            accuracy_value = accuracy_value[0]
+        #Store the accuracy, so you can get the highest accuracy
+        session['model_accuracies']['Logistic'] = accuracy_value
+ 
+
         session['labels_array_original'] = labels_array_original
         return jsonify({
             'accuracies': accuracies,
@@ -226,6 +254,15 @@ def calculate_knn():
 
         print("labels_original", labels_original)
         accuracies, results, labels_array_original = csv_knn_model(labels_original)
+
+        accuracy_value = results['Accuracy']
+        if isinstance(accuracy_value, list):
+            # If the accuracy is a list, take the first element or perform other logic to get a single value
+            accuracy_value = accuracy_value[0]
+        #Store the accuracy, so you can get the highest accuracy
+        session['model_accuracies']['KNN'] = accuracy_value
+
+
         session['labels_array_original'] = labels_array_original
         return jsonify({
             'accuracies': accuracies,
@@ -243,6 +280,15 @@ def calculate_cnn():
 
         print("labels_original", labels_original)
         accuracies, results, labels_array_original = csv_cnn_model(labels_original)
+
+        accuracy_value = results['Accuracy']
+        if isinstance(accuracy_value, list):
+            # If the accuracy is a list, take the first element or perform other logic to get a single value
+            accuracy_value = accuracy_value[0]
+        #Store the accuracy, so you can get the highest accuracy
+        session['model_accuracies']['CNN'] = accuracy_value
+
+
         session['labels_array_original'] = labels_array_original
         return jsonify({
             'accuracies': accuracies,
@@ -263,8 +309,9 @@ def mat_classification():
     if request.method=='POST':
 
         try:
-
+            features_csv_paths = []
             mat_file_paths = session.get('mat_file_paths', [])
+            print("mat file path:",mat_file_paths)
             all_preprocessing_steps = []
             label_get=[]
             labels_message=[]
@@ -280,12 +327,18 @@ def mat_classification():
                 features_message,features_df = extract_features_csp(preprocessed_raw, 250, labels, epoch_length=1.0)
                 accuracy_messages,label_get= mat_modeling_svc(subject_identifier, features_df, labels)
                 labels_message.append(label_get)
+                some_directory = "E:\\EEG-Classification"
+                csv_path = os.path.join(some_directory, f"{subject_identifier}_features.csv")
+                features_df.to_csv(csv_path, index=False)
+                features_csv_paths.append((subject_identifier, csv_path))
                 for step in preprocessing_steps:
                             if step not in all_preprocessing_steps:
                                 all_preprocessing_steps.append(step)    
             
             session['labels_message']=labels_message
             print("labels message svc:",labels_message)
+            session['features_csv_paths'] = features_csv_paths
+
             # Convert labels to list if it's an ndarray
             if isinstance(labels, np.ndarray):
                 labels = labels.tolist()
@@ -301,7 +354,7 @@ def mat_classification():
             session['subject_identifier'] = subject_identifier
             session['labels'] = labels
             # Clear the stored file paths after processing
-            # session.pop('mat_file_paths', None)
+            #session.pop('mat_file_paths', None)
             # Retrieve preprocessing steps from session
             #preprocessing_steps = session.get('preprocessing_steps', [])
             # Store the collected preprocessing steps in the session
@@ -349,6 +402,7 @@ def extract_csp_features():
         # Load the preprocessed Raw object from the file
         preprocessed_raw = mne.io.read_raw_fif(raw_file_path, preload=True)
         subject_identifier = session.get('subject_identifier')
+
         labels = session.get('labels')
 
         # Extract CSP features
@@ -369,7 +423,7 @@ def extract_csp_features():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    
+     
 
 @bp_file_reader.route('/perform_mat_modeling_svc', methods=['POST'])
 def perform_mat_modeling_svc():
@@ -495,8 +549,82 @@ def perform_mat_modeling_cnn():
         return jsonify(accuracy=accuracy_messages)
     except Exception as e:
         print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500       
+        return jsonify({'error': str(e)}), 500 
+    
+    
+@bp_file_reader.route('/get_highest_accuracy', methods=['GET'])
+def get_highest_accuracy():
+    if 'model_accuracies' in session and session['model_accuracies']:
+        # Convert the stored accuracies to float for comparison
+        accuracies_float = {model: float(acc) for model, acc in session['model_accuracies'].items()}
+        highest_accuracy_model = max(accuracies_float, key=accuracies_float.get)
+        highest_accuracy = accuracies_float[highest_accuracy_model]
 
+        return jsonify(highest_accuracy_model=highest_accuracy_model, highest_accuracy=highest_accuracy)
+    else:
+        return jsonify(error="No model accuracies found."), 404
+
+
+@bp_file_reader.route('/perform_train_test_mat', methods=['POST'])
+def perform_train_test_mat():
+    try:
+        # Parse the JSON request data
+        data = request.get_json()
+        model_name = data.get('model')
+        combined_predictions = []
+        print("moshkela hena")
+
+        # Retrieve the list of feature CSV paths and subject identifiers from the session
+        features_csv_paths = session.get('features_csv_paths')
+        print("moshkela hena 2")
+
+
+        for subject_identifier,features_csv_path in features_csv_paths:
+            print("moshkela hena 3")
+            features_df = pd.read_csv(features_csv_path)
+            labels = session.get('labels')
+            print("moshkela hena 4")
+            # Call the train_test_split_models function for each subject
+            subject_predictions = train_test_split_models(
+                subject_identifier, features_df, labels, model_name, test_size=0.2
+            )
+            print("moshkela hena 5")
+
+            # Function to map label numbers to descriptions
+            def map_label_to_description(label):
+                if label == 1:
+                    return "Moving Left Hand"
+                else:
+                    return "Moving Right Hand"
+
+            # Map labels to descriptions and sanitize int32
+            sanitized_predictions = [
+                {
+                    k: (map_label_to_description(v) if k in ['actual_label', 'predicted_label'] else int(v))
+                    if isinstance(v, np.int32) else v
+                    for k, v in prediction.items()
+                }
+                for prediction in subject_predictions # Adjusted to access 'predictions'
+            ]
+
+            # Add the sanitized predictions for the subject to the combined list
+            combined_predictions.extend(sanitized_predictions)
+
+        # Return the combined results in the response
+        return jsonify({
+            'status': 'success',
+            'all_subjects_predictions': combined_predictions,
+        })
+
+
+    except ValueError as e:
+        print(traceback.format_exc())
+        return jsonify({'status': 'error', 'details': str(e)}), 400
+    except Exception as e:
+        # Handle other exceptions
+        print(traceback.format_exc())
+        return jsonify({'status': 'error', 'details': str(e)}), 500
+    
 
 def allowed_file_pred(filename):
     return '.' in filename and \
@@ -886,7 +1014,7 @@ def perform_mat_prediction():
 
         # Store the accuracy messages in the session or pass to the template
         session['predict_message'] = all_subjects_predictions
-        session.pop('mat_predict_file_paths', None)  # Clear the file paths to prevent reprocessing
+        #session.pop('mat_predict_file_paths', None)  # Clear the file paths to prevent reprocessing
 
         return jsonify(predict=all_subjects_predictions, label_messages=session.get('labels_message'))
     except Exception as e:

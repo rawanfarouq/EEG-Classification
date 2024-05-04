@@ -1,4 +1,6 @@
 import webbrowser,os
+import socket
+import smtplib
 from threading import Timer
 from flask import Flask, render_template, session,flash,request,jsonify
 from frontend.views import views
@@ -7,6 +9,7 @@ from werkzeug.utils import secure_filename
 from flask_session import Session
 
 app = Flask(__name__)
+
 app.config['SESSION_TYPE'] = 'filesystem'  # or 'redis', 'memcached', etc.
 Session(app)
 
@@ -16,6 +19,26 @@ app.secret_key = 'csv_messages'
 @app.route('/')
 def home():
      return render_template('home.html')
+
+@app.route('/about')
+def about():
+    return render_template('about.html')
+
+@app.route('/index')
+def index():
+    return render_template('index.html')
+
+@app.route('/contact')
+def contact():
+     return render_template('contact.html')
+
+@app.route('/service')
+def service():
+     return render_template('service.html')
+
+@app.route('/appointment')
+def appointment():
+     return render_template('appointment.html')
 
 @app.route('/upload')
 def upload():
@@ -56,6 +79,7 @@ def predictions():
 @app.route('/mat_predict')
 def mat_predict():
      return render_template('mat_predict.html')
+    
 
 # def open_browser():
 #      webbrowser.open_new('http://127.0.0.1:5000/')

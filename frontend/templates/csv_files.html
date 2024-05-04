@@ -87,6 +87,8 @@
                 <button class="dropdown-item" id="calculateKNN">KNN</button>
                 <button class="dropdown-item" id="calculateCNN">CNN</button>
             </div>
+            <button id="getHighestAccuracyButton" class="btn btn-warning mt-2">Get Highest Accuracy</button>
+            <div id="highestAccuracyResult" class="mt-2"></div>
         </div>
         <div id="accuraciesContainer"></div>
     </div>
@@ -112,6 +114,27 @@
     </script>
    
    <script>
+
+// JavaScript code to handle the "Get Highest Accuracy" button click
+document.getElementById('getHighestAccuracyButton').addEventListener('click', function() {
+    fetch('/get_highest_accuracy')
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            document.getElementById('highestAccuracyResult').innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+        } else {
+            document.getElementById('highestAccuracyResult').innerHTML = `
+                <div class="alert alert-success">
+                    Highest Accuracy Model: ${data.highest_accuracy_model}<br>
+                    Accuracy: ${data.highest_accuracy}%
+                </div>`;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('highestAccuracyResult').innerHTML = `<div class="alert alert-danger">An error occurred while fetching the highest accuracy.</div>`;
+    });
+});
 
     function fetchProgress() {
         fetch('/progress')

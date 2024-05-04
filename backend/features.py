@@ -78,7 +78,7 @@ def features(eegData, labels):
                                 f'Channel_{channel+1}_power', f'Channel_{channel+1}_peak',
                                 f'Channel_{channel+1}_p2p', f'Channel_{channel+1}_crestfactor',
                                 f'Channel_{channel+1}_skew', f'Channel_{channel+1}_kurtosis'])
-                
+            '''
             #Frequency Domain Features
             fft_val = np.fft.fft(channeldata)
             psd_val = np.abs(fft_val)**2 / len(channeldata)
@@ -90,12 +90,12 @@ def features(eegData, labels):
             if sample == 0:
                 headers.extend([f'Channel_{channel+1}_fft', f'Channel_{channel+1}_psd',
                                 f'Channel_{channel+1}_fdjt'])
-                
+            '''    
         L.append(labels[0,sample])
         FS.append(L)
     headers.append('Label')
     return FS, headers
-
+csvpaths = []
 def allfeatures(FS, headers, csv_path):
     dffeatures = pd.concat(FS, ignore_index=True)
     dffeatures.columns = headers
@@ -103,6 +103,7 @@ def allfeatures(FS, headers, csv_path):
     csvpath = os.path.join(current_dir, csv_path)
     dffeatures.to_csv(csvpath, index=False)
     print(csvpath, " done")
+    csvpaths.append(csvpath)
     return csvpath
 
 subbands = [(0.5, 4), (4, 8), (8, 12), (12, 30), (30, 100)]
@@ -140,9 +141,20 @@ def extract_features(file_paths):
         csv_path = f'subband_{band_idx}_features.csv'
         allfeatures(subfeatures, headers, csv_path)
 
-    allfeatures(allf, headers, 'allfeatures.csv')
-    classification('allfeatures.csv')
+    csv = allfeatures(allf, headers, 'allfeatures.csv')
+    choosebest()
     return csv_path
+
+def choosebest():
+    best = -99999999
+    for path in csvpaths:
+        accuracy = classification(path)
+        if accuracy > best:
+            best = accuracy
+            bestpath = path
+    print(best)
+    print(bestpath)
+    return bestpath
 
 def classification(csvpath):
     df = pd.read_csv(csvpath)

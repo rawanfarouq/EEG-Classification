@@ -141,7 +141,7 @@ def extract_features(file_paths):
         csv_path = f'subband_{band_idx}_features.csv'
         allfeatures(subfeatures, headers, csv_path)
 
-    csv = allfeatures(allf, headers, 'allfeatures.csv')
+    allfeatures(allf, headers, 'allfeatures.csv')
     choosebest()
     return csv_path
 

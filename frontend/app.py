@@ -86,4 +86,4 @@ def open_browser():
 
 if __name__ == '__main__':
     Timer(1, open_browser).start()  # Wait 1 second before opening the browser
-    app.run(debug=True, use_reloader=True)
+    app.run(debug=True, use_reloader=False)

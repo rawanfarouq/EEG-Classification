@@ -94,7 +94,7 @@ def upload():
                 return render_template('alert.html', message="Unsupported file type", alert_type='danger')
 
         if mat_file_paths:
-            extract_features(mat_file_paths)
+            #extract_features(mat_file_paths)
             session['mat_file_paths'] = mat_file_paths
             print("MAT file paths stored in session:", mat_file_paths)
             # Redirect to mat_classification only if mat files are uploaded and no other types are present

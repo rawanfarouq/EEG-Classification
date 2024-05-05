@@ -239,11 +239,13 @@
                         <option value="cnn">CNN Model</option>
                     </select>
                 </div>
-                <div class="mt-3 d-grid gap-2">
+                <div class="mt-3 d-grid gap-2" >
                     <button id="fetchAccuracyButton" class="btn btn-info" type="button" onclick="fetchModelAccuracy()">Get Accuracy</button>
+                    <button id="toggleAccuracyButton" class="btn btn-info" type="button" onclick="toggleAccuracyContainer()" style="display: none;">Hide Accuracy Results</button>
+                    <button id="predictButton" class="btn btn-warning" type="button" onclick="redirectToPredictPage()" style="display: none;">Predict</button>
                 </div>
             </form>
-            <div id="accuracyContainer" class="mt-4" style="display: none;">
+            <div id="accuracyContainer" class="mt-4" style="display: none; ">
                 <ul id="accuracyList" class="list-group"></ul>
             </div>
         </div>
@@ -441,46 +443,26 @@ function displayLoadingAccuracy() {
 function displayAccuracyResults(accuracyData) {
     var accuracyContainer = document.getElementById('accuracyContainer');
     var accuracyList = document.getElementById('accuracyList');
+    var toggleAccuracyButton = document.getElementById('toggleAccuracyButton');
 
-    // Clear previous results and set the container to display
+    // Clear previous results and set the display style
     accuracyList.innerHTML = '';
     accuracyContainer.style.display = 'block';
+    toggleAccuracyButton.style.display = 'block';
+    toggleAccuracyButton.textContent = 'Hide Accuracy Results';
 
     // Create a list item for each accuracy message and append it to the list
     accuracyData.forEach(function(accuracyMessage) {
         var li = document.createElement('li');
-        li.className = 'list-group-item';
-        li.textContent = accuracyMessage; // Set text content for text-only data
-        accuracyList.appendChild(li);
+        li.className = 'list-group-item'; // Use Bootstrap class for styling
+        
+        // Convert the accuracy message into a formatted HTML string
+        var formattedMessage = accuracyMessage.replace(/, /g, '<br>'); // Replace commas with line breaks
+        li.innerHTML = formattedMessage; // Set the HTML content of the list item
+        accuracyList.appendChild(li); // Append the list item to the list
     });
+    document.getElementById('predictButton').style.display = 'block';
 
-    // Create and append the "Predict" button
-    var predictButton = document.createElement('button');
-    predictButton.id = 'predictButton';
-    predictButton.className = 'btn btn-warning my-2';
-    predictButton.textContent = 'Predict';
-    predictButton.onclick = function() { redirectToPredictPage(); };
-    accuracyContainer.appendChild(predictButton);
-
-    // Create and append the "Toggle Accuracy Results" button
-    var toggleAccuracyButton = document.createElement('button');
-    toggleAccuracyButton.id = 'toggleAccuracyButton';
-    toggleAccuracyButton.className = 'btn btn-info my-2';
-    toggleAccuracyButton.textContent = 'Hide Accuracy Results';
-    toggleAccuracyButton.onclick = function() { toggleAccuracyContainer(); };
-    accuracyContainer.appendChild(toggleAccuracyButton);
-}
-
-function toggleAccuracyContainer() {
-    var accuracyContainer = document.getElementById('accuracyContainer');
-    var toggleButton = document.getElementById('toggleAccuracyButton');
-    if (accuracyContainer.style.display === 'none') {
-        accuracyContainer.style.display = 'block';
-        toggleButton.textContent = 'Hide Accuracy Results';
-    } else {
-        accuracyContainer.style.display = 'none';
-        toggleButton.textContent = 'View Accuracy Results';
-    }
 }
 
 

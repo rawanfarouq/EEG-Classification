@@ -4,25 +4,55 @@
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MAT Classification</title>
+    <title>EEG Hub - EEG Analysis Website</title>
+
+    <meta content="Free HTML Templates" name="keywords">
+    <meta content="Free HTML Templates" name="description">
+
+    <!-- Favicon -->
+    <link href="/static/img/favicon.ico" rel="icon">
+
+    <!-- Google Web Fonts -->
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Jost:wght@500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet"> 
+
+    <!-- Icon Font Stylesheet -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.4.1/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Libraries Stylesheet -->
+    <link href="/static/lib/owlcarousel/assets/owl.carousel.min.css" rel="stylesheet">
+    <link href="/static/lib/animate/animate.min.css" rel="stylesheet">
+    <link href="/static/lib/tempusdominus/css/tempusdominus-bootstrap-4.min.css" rel="stylesheet" />
+    <link href="/static/lib/twentytwenty/twentytwenty.css" rel="stylesheet" />
+
+    <!-- Customized Bootstrap Stylesheet -->
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Template Stylesheet -->
+    <link href="/static/css/style.css" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Arial', sans-serif;
-            background-color: #f8f9fa;
+        html, body {
+            height: 120%;
             margin: 0;
-            padding: 0;
+        }
+
+        body {
             display: flex;
-            justify-content: center;
-            align-items: center;
             flex-direction: column;
-            height: 100vh;
-            text-align: center;
+        }
+
+        .content-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%; /* Adjust as per your layout requirements */
         }
         h1 {
             color: #333;
         }
         .container {
-            width: 80%;
+            width: 100%;
             background-color: #fff;
             padding: 20px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
@@ -92,50 +122,153 @@
             border-radius: 0.25rem;
             text-align: left;
         }
+        .footer-container {
+            width: 100%;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Mat File Classification</h1>
-    </div>
 
-    <button id="toggleButton" class="btn btn-primary my-2" onclick="toggleStepsContainer()">View Process Data</button>
-    <button id="extractFeaturesButton" class="btn btn-success my-2" onclick="extractFeatures()">Extract CSP Features</button>
+    <div class="content-wrapper">
+
+
+        <!-- Topbar Start -->
+        <div class="container-fluid bg-light ps-5 pe-0 d-none d-lg-block">
+           <div class="row gx-0">
+               <div class="col-md-6 text-center text-lg-start mb-2 mb-lg-0">
+                   <div class="d-inline-flex align-items-center">
+                       <small class="py-2"><i class="far fa-clock text-primary me-2"></i>Opening Hours: Mon - Tues : 6.00 am - 10.00 pm, Sunday Closed </small>
+                   </div>
+               </div>
+               <div class="col-md-6 text-center text-lg-end">
+                   <div class="position-relative d-inline-flex align-items-center bg-primary text-white top-shape px-5">
+                       <div class="me-3 pe-3 border-end py-2">
+                           <p class="m-0"><i class="fa fa-envelope-open me-2"></i>info@eeghub.com</p>
+                       </div>
+                       <div class="py-2">
+                           <p class="m-0"><i class="fa fa-phone-alt me-2"></i>+012 345 6789</p>
+                       </div>
+                   </div>
+               </div>
+           </div>
+       </div>
+       <!-- Topbar End -->
    
-    <button id="toggleAccuracyButton" class="btn btn-info my-2" onclick="toggleAccuracyContainer()" style="display: none;">Hide Accuracy Results</button>
-    <div id="modelSelectionContainer" style="display: none; margin-top: 10px;">
-        <label for="modelSelect">Choose a model:</label>
-        <select id="modelSelect" class="form-control">
-            <option value="">Select Model</option>
-            <option value="svc">SVC Model</option>
-            <option value="random">Random Forest Model</option>
-            <option value="logistic">Logistic Regression Model</option>
-            <option value="knn">KNN Model</option>
-            <option value="cnn">CNN Model</option>
-        </select>
-        <button id="fetchAccuracyButton" class="btn btn-info my-2" onclick="fetchModelAccuracy()">Get Accuracy</button>
-    </div>
-    <button id="predictButton" class="btn btn-warning my-2" onclick="redirectToPredictPage()" style="display: none;">Predict</button>
+   
+       <!-- Navbar Start -->
+       <nav class="navbar navbar-expand-lg bg-white navbar-light shadow-sm px-5 py-3 py-lg-0" style="width: 100%;">
+           <a href="index.html" class="navbar-brand p-0">
+               <h1 class="m-0 text-primary"><i class="fa fa-tooth me-2"></i>EEG Hub</h1>
+           </a>
+           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse">
+               <span class="navbar-toggler-icon"></span>
+           </button>
+           <div class="collapse navbar-collapse" id="navbarCollapse">
+               <div class="navbar-nav ms-auto py-0">
+                   <a href="index" class="nav-item nav-link">Home</a>
+                   <a href="about" class="nav-item nav-link">About</a>
+                   <a href="service" class="nav-item nav-link active">Service</a>
+                   <a href="contact" class="nav-item nav-link">Contact</a>
+               </div>
+               <button type="button" class="btn text-dark" data-bs-toggle="modal" data-bs-target="#searchModal"><i class="fa fa-search"></i></button>
+               <a href="appointment" class="btn btn-primary py-2 px-4 ms-3">Upload Your EEG Data</a>
+           </div>
+       </nav>
+       <!-- Navbar End -->
+
+    <div class="container" style="width: 100%;">
+        <h1>Welcome to the EEG Data Analysis Portal</h1>
+        <p class="lead mt-4">
+            This platform is dedicated to the analysis of MAT files, which contain raw EEG data. Raw data 
+            from EEG recordings often include noise and artifacts that need to be carefully processed before 
+            any meaningful analysis can be performed. Our comprehensive workflow includes preprocessing steps 
+            to remove these unwanted signals, feature extraction to identify the characteristics most relevant 
+            to your study, and the application of machine learning models for data classification.
+        </p>
+        <p class="mb-4">
+            We will proceed step by step, starting with the crucial preprocessing of your EEG data. When you're 
+            ready to begin, please click the button below to initiate the preprocessing stage.
+        </p>
+
+        <div class="text-center" style="margin-top: 2rem; margin-left: auto; margin-right: auto; width: fit-content;">
+            <button id="toggleButton" class="btn btn-primary my-2 mr-2" onclick="toggleStepsContainer()">View Process Data</button>
+            <!-- Spinner element (hidden by default) -->
+        <div id="loadingSpinner" class="text-center" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+        <div id="stepsContainer">
+            <h2>Preprocessing Steps:</h2>
+            <ul id="stepsList"></ul>
+            <p id="noSteps" class="no-steps">No preprocessing steps available.</p>
+        </div>
+            <button id="extractFeaturesButton" class="btn btn-success my-2 mr-2" onclick="extractFeatures()" style="display: none;">Extract CSP Features</button>
+            <div id="loadingSpinner1" class="text-center" style="display: none;">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+            <div class="row justify-content-center">
+                <div class="col-lg-8 col-md-10">
+                    <div id="cspFeaturesContainer" class="card mt-4" style="display: none;">
+                        <div class="card-header bg-primary text-white">
+                            <h2 class="card-title">CSP Features</h2>
+                        </div>
+                        <div class="card-body">
+                            <p id="successMessage"></p>
+                            <ul id="featuresList" class="list-group list-group-flush">
+                                <!-- Feature list items will be inserted here -->
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+   
+        <div id="modelSelectionContainer" class="mt-4" style="display: none; width: 25%; margin-left: auto; margin-right: auto;">
+            <form>
+                <div class="form-group">
+                    <label for="modelSelect">Choose a model:</label>
+                    <select id="modelSelect" class="form-control">
+                        <option value="">Select Model</option>
+                        <option value="svc">SVC Model</option>
+                        <option value="random">Random Forest Model</option>
+                        <option value="logistic">Logistic Regression Model</option>
+                        <option value="knn">KNN Model</option>
+                        <option value="cnn">CNN Model</option>
+                    </select>
+                </div>
+                <div class="mt-3 d-grid gap-2">
+                    <button id="fetchAccuracyButton" class="btn btn-info" type="button" onclick="fetchModelAccuracy()">Get Accuracy</button>
+                </div>
+            </form>
+            <div id="accuracyContainer" class="mt-4" style="display: none;">
+                <ul id="accuracyList" class="list-group"></ul>
+            </div>
+        </div>
     <div id="alertBox" class="alert" style="display:none;"></div> <!-- Make sure this element exists -->
 
 
 
-<div id="stepsContainer">
-    <h2>Preprocessing Steps:</h2>
-    <ul id="stepsList"></ul>
-    <p id="noSteps" class="no-steps">No preprocessing steps available.</p>
-</div>
-
-<div id="cspFeaturesContainer" style="display: none;">
-    <h2>CSP Features:</h2>
-    <p id="successMessage" style="color: green;"></p>
-</div>
 
 <!-- Add this below the CSP Features container in mat_files_class.html -->
-<div id="accuracyContainer" style="display: none;">
-    <h2>Accuracy Results:</h2>
-    <ul id="accuracyList" class="list-group"></ul>
-</div>
+
+    </div>
+
+    </div>
+
+    <div class="footer-container">
+        <div class="container-fluid text-light py-4" style="background: #051225; ">
+            <div class="container1">
+                <div class="row g-0">
+                    <div class="col-md-6 text-center text-md-start">
+                        <p class="mb-md-0">&copy; <a class="text-white border-bottom" href="#">EEG Hub 2024</a>. All Rights Reserved.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
@@ -170,61 +303,72 @@
     function toggleStepsContainer() {
         var stepsContainer = document.getElementById('stepsContainer');
         var toggleButton = document.getElementById('toggleButton');
+        var spinner = document.getElementById('loadingSpinner');
 
-        if (stepsContainer.style.display === 'none') {
-            stepsContainer.style.display = 'block';
-            toggleButton.textContent = 'Hide Process Data';
-            if (!preprocessingStepsFetched) {
-                fetchPreprocessingSteps();
-            } else {
-                displayPreprocessingSteps();
-            }
+        if (!preprocessingStepsFetched) {
+            // Show spinner only and fetch data
+            spinner.classList.remove('d-none');
+            fetchPreprocessingSteps();
         } else {
-            stepsContainer.style.display = 'none';
-            toggleButton.textContent = 'View Process Data';
+            // Toggle visibility of steps container
+            if (stepsContainer.style.display === 'none') {
+                stepsContainer.style.display = 'block';
+                toggleButton.textContent = 'Hide Process Data';
+            } else {
+                stepsContainer.style.display = 'none';
+                toggleButton.textContent = 'View Process Data';
+            }
         }
-    }
+}
     
 
-    function fetchPreprocessingSteps() {
-        var stepsList = document.getElementById('stepsList');
-        var noSteps = document.getElementById('noSteps');
+function fetchPreprocessingSteps() {
+    var stepsList = document.getElementById('stepsList');
+    var noSteps = document.getElementById('noSteps');
+    var toggleButton = document.getElementById('toggleButton');
+    var spinner = document.getElementById('loadingSpinner');
 
-        // Clear existing list
-        stepsList.innerHTML = '';
-        noSteps.style.display = 'none';
-        stepsList.innerHTML = '<li>Loading...</li>';
+    // Clear existing list
+    stepsList.innerHTML = '';
+    noSteps.style.display = 'none';
+    spinner.style.display = 'block';
 
-        // AJAX call to the server to fetch preprocessing steps
-        fetch('{{ url_for("file_reader.mat_classification") }}', {
-            method: 'POST',
-        }).then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        }).then(data => {
-            if (data.error) {
-                console.error('Server error:', data.error);
-                stepsList.innerHTML = '<li>Error fetching steps</li>';
-            } else {
-                if (data.preprocessing_steps && data.preprocessing_steps.length > 0) {
-                    fetchedPreprocessingSteps = data.preprocessing_steps;
-                    preprocessingStepsFetched = true;
-                    displayPreprocessingSteps();
-                    // Show the Extract CSP Features button
-                    document.getElementById('extractFeaturesButton').style.display = 'block';
-                } else {
-                    noSteps.style.display = 'block';
-                }
-            }
-        }).catch(error => {
-            console.error('Error:', error);
+    // AJAX call to the server to fetch preprocessing steps
+    fetch('{{ url_for("file_reader.mat_classification") }}', {
+        method: 'POST',
+    }).then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    }).then(data => {
+        spinner.classList.add('d-none');// Hide spinner
+        if (data.error) {
+            console.error('Server error:', data.error);
             stepsList.innerHTML = '<li>Error fetching steps</li>';
-        });
-    }
+        } else {
+            if (data.preprocessing_steps && data.preprocessing_steps.length > 0) {
+                fetchedPreprocessingSteps = data.preprocessing_steps;
+                preprocessingStepsFetched = true;
+                displayPreprocessingSteps();
+                // Show the Extract CSP Features button
+                document.getElementById('extractFeaturesButton').style.display = 'block';
+                // Now show the steps container
+                stepsContainer.style.display = 'block';
+                toggleButton.textContent = 'Hide Process Data';
+            } else {
+                noSteps.style.display = 'block';
+            }
+        }
+    }).catch(error => {
+        console.error('Error:', error);
+        spinner.classList.add('d-none'); // Hide spinner on error
+        stepsList.innerHTML = '<li>Error fetching steps</li>';
+    });
+}
 
-    function displayPreprocessingSteps() {
+
+function displayPreprocessingSteps() {
     var stepsList = document.getElementById('stepsList');
     stepsList.innerHTML = '';
     fetchedPreprocessingSteps.forEach(function(step) {
@@ -238,20 +382,17 @@
 function extractFeatures() {
     var cspFeaturesContainer = document.getElementById('cspFeaturesContainer');
     var extractFeaturesButton = document.getElementById('extractFeaturesButton');
+    var spinner = document.getElementById('loadingSpinner1');
 
-    if (cspFeaturesContainer.style.display === 'none') {
-        // If not visible, show the features and update button text
-        cspFeaturesContainer.style.display = 'block';
-        extractFeaturesButton.textContent = 'Unview Extract Features';
-        
-        // Only fetch features and perform modeling if it hasn't been done already
-        if (!modelingPerformed) {
-            fetchCSPFeatures();
-        }
+    // Only fetch features and perform modeling if it hasn't been done already
+    if (!modelingPerformed) {
+        // Show spinner while fetching
+        spinner.style.display = 'block';
+        fetchCSPFeatures();
     } else {
-        // If visible, hide the features and update button text
-        cspFeaturesContainer.style.display = 'none';
-        extractFeaturesButton.textContent = 'View Extract Features';
+        // Toggle visibility of features container
+        cspFeaturesContainer.style.display = cspFeaturesContainer.style.display === 'none' ? 'block' : 'none';
+        extractFeaturesButton.textContent = cspFeaturesContainer.style.display === 'none' ? 'View Extract Features' : 'Unview Extract Features';
     }
 }
 
@@ -265,10 +406,16 @@ function fetchCSPFeatures() {
         return response.json();
     }).then(data => {
         console.log("entered fetch csp")
+        var spinner = document.getElementById('loadingSpinner1'); // Get the spinner element
+        spinner.style.display = 'none'; // Hide spinner after fetching
+
         if (data.message) {
             console.log("entered if fetch csp")
             displaySuccessMessage(data.message); // Display the message from the server
             document.getElementById('modelSelectionContainer').style.display = 'block';
+            document.getElementById('cspFeaturesContainer').style.display = 'block';
+            document.getElementById('extractFeaturesButton').textContent = 'Unview Extract Features';
+            modelingPerformed = true; // Set flag to indicate modeling has been performed
         } else {
             displayErrorMessage('No message received from server.');
         }
@@ -294,49 +441,75 @@ function displayLoadingAccuracy() {
 function displayAccuracyResults(accuracyData) {
     var accuracyContainer = document.getElementById('accuracyContainer');
     var accuracyList = document.getElementById('accuracyList');
-    var toggleAccuracyButton = document.getElementById('toggleAccuracyButton');
 
-    // Clear previous results and set the display style
+    // Clear previous results and set the container to display
     accuracyList.innerHTML = '';
     accuracyContainer.style.display = 'block';
-    toggleAccuracyButton.style.display = 'block';
-    toggleAccuracyButton.textContent = 'Hide Accuracy Results';
 
     // Create a list item for each accuracy message and append it to the list
     accuracyData.forEach(function(accuracyMessage) {
         var li = document.createElement('li');
-        li.className = 'list-group-item'; // Use Bootstrap class for styling
-        
-        // Convert the accuracy message into a formatted HTML string
-        var formattedMessage = accuracyMessage.replace(/, /g, '<br>'); // Replace commas with line breaks
-        li.innerHTML = formattedMessage; // Set the HTML content of the list item
-        accuracyList.appendChild(li); // Append the list item to the list
+        li.className = 'list-group-item';
+        li.textContent = accuracyMessage; // Set text content for text-only data
+        accuracyList.appendChild(li);
     });
-    document.getElementById('predictButton').style.display = 'block';
 
+    // Create and append the "Predict" button
+    var predictButton = document.createElement('button');
+    predictButton.id = 'predictButton';
+    predictButton.className = 'btn btn-warning my-2';
+    predictButton.textContent = 'Predict';
+    predictButton.onclick = function() { redirectToPredictPage(); };
+    accuracyContainer.appendChild(predictButton);
+
+    // Create and append the "Toggle Accuracy Results" button
+    var toggleAccuracyButton = document.createElement('button');
+    toggleAccuracyButton.id = 'toggleAccuracyButton';
+    toggleAccuracyButton.className = 'btn btn-info my-2';
+    toggleAccuracyButton.textContent = 'Hide Accuracy Results';
+    toggleAccuracyButton.onclick = function() { toggleAccuracyContainer(); };
+    accuracyContainer.appendChild(toggleAccuracyButton);
+}
+
+function toggleAccuracyContainer() {
+    var accuracyContainer = document.getElementById('accuracyContainer');
+    var toggleButton = document.getElementById('toggleAccuracyButton');
+    if (accuracyContainer.style.display === 'none') {
+        accuracyContainer.style.display = 'block';
+        toggleButton.textContent = 'Hide Accuracy Results';
+    } else {
+        accuracyContainer.style.display = 'none';
+        toggleButton.textContent = 'View Accuracy Results';
+    }
 }
 
 
-    function displaySuccessMessage(message) {
-        // Make sure the CSP features container is visible
-        document.getElementById('cspFeaturesContainer').style.display = 'block';
+function displaySuccessMessage(message) {
+    // Ensure the CSP features container is visible
+    var cspFeaturesContainer = document.getElementById('cspFeaturesContainer');
+    cspFeaturesContainer.style.display = 'block';
 
-        var messageLines = message.split('\n');
-        var formattedMessage = '<div class="message-box">';
-        
-        messageLines.forEach(function(line) {
-            if (line.startsWith('*')) {
-                formattedMessage += '<li class="list-unstyled">' + line.slice(1).trim() + '</li>';
-            } else {
-                formattedMessage += '<p>' + line + '</p>';
-            }
-        });
+    // Split the message into lines, assuming each feature is on a new line
+    var features = message.split('\n');
 
-        formattedMessage += '</div>';
+    // Find the successMessage element and the featuresList UL
+    var successMessage = document.getElementById('successMessage');
+    var featuresList = document.getElementById('featuresList');
 
-        var successMessage = document.getElementById('successMessage');
-        successMessage.innerHTML = formattedMessage;
+    // The first line is the introduction sentence, set it as the successMessage text
+    successMessage.textContent = features[0];
+
+    // Clear previous features
+    featuresList.innerHTML = '';
+
+    // Start the loop at 1 to skip the introduction sentence
+    for (var i = 1; i < features.length; i++) {
+        var li = document.createElement('li');
+        li.className = 'list-group-item';
+        li.textContent = features[i];
+        featuresList.appendChild(li);
     }
+}
 
     function displayErrorMessage(message) {
         var errorMessage = document.getElementById('successMessage');

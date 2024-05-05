@@ -29,6 +29,8 @@ def upload():
     print("Entered upload")
     session.pop('csv_messages', None)
     file_path_feature=[]
+    csv_file_path=[]
+    session['model_accuracies'] = {}
     # Initialize the accuracies dictionary if it doesn't exist
     if 'model_accuracies' not in session:
         session['model_accuracies'] = {}
@@ -63,9 +65,10 @@ def upload():
                     if extension in {'csv', 'xls', 'xlsx', 'xlsm', 'xlsb'}:
                         csv_or_excel_uploaded = True  # Set the flag if a CSV or Excel file is found
                         file_path_feature.append(file_path)
-                        print(f"Calling read_eeg_file for {file_path}")
-                        raw, sfreq = read_eeg_file(file_path)
-                        print(f"read_eeg_file returned {len(raw)} samples for {file_path}")
+                        csv_file_path.append(file_path)
+                        # print(f"Calling read_eeg_file for {file_path}")
+                        # raw, sfreq = read_eeg_file(file_path)
+                        # print(f"read_eeg_file returned {len(raw)} samples for {file_path}")
                         
                     elif extension =='txt':
                         file_path_label_original.append(file_path)
@@ -74,14 +77,12 @@ def upload():
                         session['label_conditions_in_predict_train']=label_conditions_in_predict_train
                         print("label_conditions_in_predict_train",label_conditions_in_predict_train)
 
-                    elif extension == 'edf':
-                        raw, sfreq = read_edf_eeg(file_path)
                     elif extension == 'mat':
                         mat_file_paths.append(file_path)
                     else:
                         raise ValueError("Unsupported file type")
                     
-                    if extension != 'mat' and raw is None:
+                    if extension != 'mat'and  extension not in {'csv', 'xls', 'xlsx', 'xlsm', 'xlsb'} and extension!='txt':
                         raise ValueError(f"Failed to read file {filename}")
                 
                 except ValueError as e:
@@ -104,8 +105,9 @@ def upload():
             # Redirect to csv_files if any CSV or Excel files were uploaded
             if csv_or_excel_uploaded:
                 file_paths = [os.path.join(downloads_folder, secure_filename(file.filename)) for file in files if allowed_file(file.filename)]
-                messages, csv_only = csv_identification(file_paths, processed_data_keywords)
-                session['csv_messages'] = messages
+                # messages, csv_only = csv_identification(file_paths, processed_data_keywords)
+                # session['csv_messages'] = messages
+                session['csv_file_path']=csv_file_path
                 session['file_path_feature']=file_path_feature
                 print("file feature path:",file_path_feature)
                 return render_template('success_and_redirect.html', message="All files successfully read", redirect_url=url_for('csv_files'))
@@ -114,6 +116,53 @@ def upload():
 
     else:
         return render_template("upload.html")
+    
+
+@bp_file_reader.route('/check_csv', methods=['GET', 'POST'])
+def check_csv():
+    try:
+
+        files = session.get('csv_file_path', [])
+        print("file identify:", files)
+
+        results = []
+
+        for file_path in files:
+            raw, sfreq, cleanliness_messages = read_eeg_file(file_path)
+            
+            # Construct a dictionary for the response
+            result = {
+                'cleanliness_messages': cleanliness_messages
+            }
+            results.append(result)
+            print("results:",results)
+
+        # Return a JSON response containing all results
+        return jsonify(results)
+    except Exception as e:
+        print(traceback.format_exc())  # This will print the full traceback to the console
+
+        return jsonify({'error': str(e)}), 500
+
+@bp_file_reader.route('/csv_identify', methods=['GET', 'POST'])
+def csv_identify():
+    try:
+        # Check if features file path is already stored in session
+        files = session.get('csv_file_path', [])
+        print("file identify:",files)
+        
+        
+        messages, csv_only = csv_identification(files, processed_data_keywords)
+        print("Processing file csv in upload:", files)
+
+        # Return a success response or render a template as needed
+        return jsonify(messages=messages), 200
+
+    except Exception as e:
+        print(traceback.format_exc())  # This will print the full traceback to the console
+
+        return jsonify({'error': str(e)}), 500
+
 
 @bp_file_reader.route('/csv_features', methods=['GET', 'POST'])
 def csv_features_function():
@@ -135,7 +184,7 @@ def csv_features_function():
         
 
         for file_path in files:
-            raw, sfreq= read_eeg_file(file_path)
+            raw, sfreq,clean_message= read_eeg_file(file_path)
             # This function should return a DataFrame
             csv_features_dataframe = csv_features(raw)
             features_list.append(csv_features_dataframe)
@@ -562,7 +611,7 @@ def get_highest_accuracy():
 
         return jsonify(highest_accuracy_model=highest_accuracy_model, highest_accuracy=highest_accuracy)
     else:
-        return jsonify(error="No model accuracies found."), 404
+        return jsonify(error="No model accuracies found. Please select a model"), 404
 
 
 @bp_file_reader.route('/perform_train_test_mat', methods=['POST'])
@@ -662,7 +711,7 @@ def predictions():
 
                 try:
                     if extension in {'csv', 'xls', 'xlsx', 'xlsm', 'xlsb'}:
-                        raw, sfreq = read_eeg_file(file_path)
+                        raw, sfreq,clean_message = read_eeg_file(file_path)
                         if raw is not None:
                             file_path_csv.append(file_path)
                     elif extension in {'txt'}:
@@ -704,7 +753,7 @@ def predict():
 
     
     for file_path in file_path_csv:
-        raw, sfreq= read_eeg_file(file_path)
+        raw, sfreq,clean_message= read_eeg_file(file_path)
         csv_features_dataframe = csv_features(raw)
         if 'label' in csv_features_dataframe.columns:
             csv_features_dataframe.drop('label', axis=1, inplace=True)

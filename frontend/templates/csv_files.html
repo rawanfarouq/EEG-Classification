@@ -5,77 +5,219 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Link to Bootstrap CSS -->
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
-    <title>CSV Files Page</title>
+    <!-- Favicon -->
+    <link href="/static/img/favicon.ico" rel="icon">
+
+    <!-- Google Web Fonts -->
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Jost:wght@500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet"> 
+
+    <!-- Icon Font Stylesheet -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.4.1/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Libraries Stylesheet -->
+    <link href="/static/lib/owlcarousel/assets/owl.carousel.min.css" rel="stylesheet">
+    <link href="/static/lib/animate/animate.min.css" rel="stylesheet">
+    <link href="/static/lib/tempusdominus/css/tempusdominus-bootstrap-4.min.css" rel="stylesheet" />
+    <link href="/static/lib/twentytwenty/twentytwenty.css" rel="stylesheet" />
+
+    <!-- Customized Bootstrap Stylesheet -->
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Template Stylesheet -->
+    <link href="/static/css/style.css" rel="stylesheet">
+
+    <title>EEG Hub - EEG Analysis Website</title>
     <style>
         body {
-            background-color: #f7f7f7;
-        }
-        .container {
-            border-radius: 5px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-            padding: 20px;
-            background-color: #fff;
-            margin-top: 40px;
-            margin-bottom: 40px;
-        }
+        background-color: #f7f7f7;
+        padding-top: 100px; /* Adjust this value to match the height of your fixed navbar */
+    }
+    
+    .container {
+        border-radius: 5px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        padding: 20px;
+        background-color: #fff;
+        /* removed margin-top: 140px; since padding-top in body should take care of this */
+    }
         h1, h2 {
             color: #007bff;
         }
-        .message-box {
-            margin-bottom: 1rem;
-            padding: 1rem;
-            background-color: #e7f3ff;
-            border-left: 5px solid #007bff;
-            border-radius: 0.25rem;
+        #messagesContainer .message-box {
+        padding: 0.6rem;
+        margin-bottom: 0.5rem;
+        border: 1px solid #007bff;
+        border-radius: 0.25rem;
+        background-color: #e7f3ff;
+        width: 50%; /* Set a specific width */
+        margin-left: auto; /* These two lines will center your box */
+        margin-right: auto;
+        /* Or use max-width for a maximum width while keeping it responsive */
+        /* max-width: 500px; */ /* Example of a max-width setting */
+    }
+        #messagesContainer .message-box-header {
+        font-size: 1em; /* Reduce size for headers */
+        font-weight: bold;
+        cursor: pointer;
         }
-        .message-box-header {
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .collapse-content {
-            margin-top: 0.5rem;
-        }
+        
         .message-box p {
             font-size: 1.1em;
-            color: #333;
+            color: #131313;
         }
         .message-box ol li {
             margin-bottom: 0.25rem;
         }
+        #cleanlinessResults .list-group {
+        width: auto; /* Set the width to auto to shrink wrap content */
+        display: inline-block; /* Make the list group inline */
+        margin-top: 1rem; /* Add some margin at the top */
+        }
+
+        #cleanlinessResults .list-group-item {
+            padding: 0.5rem 1rem; /* Smaller padding for list items */
+            font-size: 0.9em; /* Smaller font size for the messages */
+            background-color: #e7f3ff; /* Light blue background for readability */
+        }
+        .model-accuracies-panel {
+        background-color: #fff; 
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1rem;
+        padding: 1rem;
+        width: 50%; /* Set a specific width */
+        margin-left: auto; /* These two lines will center your box */
+        margin-right: auto;
+    }
+
+    .model-accuracies-panel h3 {
+        font-size: 1.25rem;
+        color: #0b0b0c;
+    }
+
+    .model-accuracies-panel .list-group-item {
+        background-color: #e7f3ff;
+        border: 0;
+    }
+
+    .model-accuracies-panel .btn-info {
+        margin-top: 0.5rem;
+        margin-right: 0.5rem;
+    }
+
+    .model-accuracies-panel .btn-secondary {
+        margin-top: 0.5rem;
+    }
+    #highestAccuracyResult {
+        max-width: 400px; /* Adjust the max-width as needed */
+        width: auto;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center; /* Center the text inside the alert */
+    }
+    .section-spacing {
+        margin-top: 2rem; /* Adjust the value to the desired space between sections */
+        margin-bottom: 2rem; /* Adjust the value to the desired space between sections */
+    }
+    .footer {
+        position: relative; /* Change from absolute to relative */
+        width: 100%;
+        background: #051225;
+        padding: 20px 0;
+        margin-top: 3rem; /* Space between the content and footer */
+        left: 0;
+        right: 0;
+    }
+  
+      
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>CSV Files Processed</h1>
-        <!-- Display messages from the csv_identification function -->
-        {% for message in messages %}
-            {% if "The following feature extraction methods were identified:" in message %}
-                <div class="message-box">
-                    <div class="message-box-header" data-toggle="collapse" data-target="#featureExtraction{{ loop.index }}">
-                        View Extracted Features Methods
+    <!-- Topbar Start -->
+    <div class="container-fluid bg-light ps-5 pe-0 fixed-top">
+        <div class="row gx-0">
+            <div class="col-md-6 text-center text-lg-start mb-2 mb-lg-0">
+                <div class="d-inline-flex align-items-center">
+                    <small class="py-2"><i class="far fa-clock text-primary me-2"></i>Opening Hours: Mon - Tues : 6.00 am - 10.00 pm, Sunday Closed </small>
+                </div>
+            </div>
+            <div class="col-md-6 text-center text-lg-end">
+                <div class="position-relative d-inline-flex align-items-center bg-primary text-white top-shape px-5">
+                    <div class="me-3 pe-3 border-end py-2">
+                        <p class="m-0"><i class="fa fa-envelope-open me-2"></i>info@eeghub.com</p>
                     </div>
-                    <div id="featureExtraction{{ loop.index }}" class="collapse">
-                        <div class="collapse-content">
-                            <p>{{ message.split(':')[0] }}:</p>
-                            <ol>
-                                {% for method in message.split(':')[1].split(',') %}
-                                    <li>{{ method.strip() }}</li>
-                                {% endfor %}
-                            </ol>
-                        </div>
+                    <div class="py-2">
+                        <p class="m-0"><i class="fa fa-phone-alt me-2"></i>+012 345 6789</p>
                     </div>
                 </div>
-            {% else %}
-                <div class="message-box">
-                    {{ message }}
-                </div>
-            {% endif %}
-        {% endfor %}
+            </div>
+        </div>
     </div>
+    <!-- Topbar End -->
 
-    <div class="container">
-        <h2>Model Accuracies</h2>
+    <!-- Navbar Start -->
+    <nav class="navbar navbar-expand-lg bg-white navbar-light shadow-sm px-5 py-3 py-lg-0 fixed-top" style="top: 32px;"> <!-- Adjust 'top' as per the height of the topbar -->
+        <div class="container-fluid"> <!-- Use container-fluid for full width -->
+            <a href="index" class="navbar-brand p-0">
+                <h1 class="m-0 text-primary"><i class="fa fa-brain me-2"></i>EEG Hub</h1>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="navbar-nav ms-auto py-0">
+                <a href="index" class="nav-item nav-link active">Home</a>
+                <a href="about" class="nav-item nav-link">About</a>
+                <a href="service" class="nav-item nav-link">Service</a>
+                <a href="contact" class="nav-item nav-link">Contact</a>
+            </div>
+            <button type="button" class="btn text-dark" data-bs-toggle="modal" data-bs-target="#searchModal"><i class="fa fa-search"></i></button>
+        </div>
+        </div>
+    </nav>
+    <!-- Navbar End -->
+    
+    <div class="container-fluid mt-5 pt-3">
+        <div class="text-center mb-4">
+            <h2>EEG Data Preparation</h2>
+            <p>Begin your EEG analysis by ensuring your data is clean. Clean data is essential for accurate modeling. Click the button below to verify the cleanliness of your EEG data.</p>
+            <button id="cleanCheckButton" class="btn btn-primary">View Cleanliness</button>
+            <div id="loadingSpinner" class="text-center d-none">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="sr-only">Loading...</span>
+                </div>
+            </div>
+            <!-- Cleanliness Check Results will be displayed here -->
+            <div id="cleanlinessResults" class="mt-3 d-none">
+                <ul class="list-group list-group-flush">
+                    <!-- Results will be inserted here by JavaScript -->
+                </ul>
+            </div>
+        </div>
+    
+        <hr> 
+
+        <div class="text-center mt-4">
+            <h2>Feature Identification</h2>
+            <p>With clean EEG data confirmed, our system has preprocessed and extracted features ready for analysis. The following button will display the extracted features utilizing known and widely used methods in the field. </p>
+            <p>Please note that it's essential to complete this step to ensure optimal modeling performance. If this step is skipped, the model may not perform as expected.</p>
+            <button id="csvIdentificationButton" class="btn btn-secondary">CSV Identification</button>
+            <div id="loadingSpinner1" class="text-center d-none">
+                <div class="spinner-border text-secondary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+            <div id="messagesContainer" class="mt-3">
+                <!-- Messages will be inserted dynamically here -->
+            </div>
+            
+            <hr>
+       
+        <div class="text-center mt-4" id="modelAccuraciesSection">
+            <h2>Model Performance</h2>
         <div class="dropdown mb-3">
             <button class="btn btn-primary dropdown-toggle" type="button" id="modelDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                 Select Model
@@ -87,18 +229,164 @@
                 <button class="dropdown-item" id="calculateKNN">KNN</button>
                 <button class="dropdown-item" id="calculateCNN">CNN</button>
             </div>
-            <button id="getHighestAccuracyButton" class="btn btn-warning mt-2">Get Highest Accuracy</button>
-            <div id="highestAccuracyResult" class="mt-2"></div>
+            
         </div>
+        <!-- Spinner element -->
+        <div id="loadingSpinner2" class="text-center d-none">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+        <button id="getHighestAccuracyButton" class="btn btn-warning">Get Highest Accuracy</button>
+        <div id="highestAccuracyResult" class="mt-2"></div>
         <div id="accuraciesContainer"></div>
+        </div>
+        <div id="alertBox" class="alert alert-info" style="display:none;"></div>
+
     </div>
-    <div id="alertBox" class="alert alert-info" style="display:none;"></div>
+
+
+    <div id="alertContainer"></div>
+
     
+    <div class="container-fluid text-light py-4 footer" style="background: #051225;">
+        <div class="container-fluid">
+            <div class="row g-0">
+                <div class="col-md-6 text-center text-md-start">
+                    <p class="mb-md-0">&copy; <a class="text-white border-bottom" href="#">EEG Hub 2024</a>. All Rights Reserved.</p>
+                </div>
+                
+            </div>
+        </div>
+    </div>  
 
     <!-- Link to jQuery, Popper.js, and Bootstrap JS -->
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+
+    <script>
+        // Flag variable to track if results have been fetched
+        let resultsFetched = false;
+    
+        document.getElementById('cleanCheckButton').addEventListener('click', function() {
+    let resultsDiv = document.getElementById('cleanlinessResults');
+    let resultsList = resultsDiv.querySelector('.list-group');
+    let spinner = document.getElementById('loadingSpinner');
+    let button = document.getElementById('cleanCheckButton');
+
+    if (!resultsFetched) {
+        // Show the spinner
+        spinner.classList.remove('d-none');
+        // Disable the button while fetching
+        button.disabled = true;
+        button.textContent = 'Checking...';
+
+        fetch('/check_csv', {
+            method: 'POST',
+            // Include other necessary request headers or credentials if needed
+        }).then(response => response.json())
+        .then(data => {
+            resultsList.innerHTML = ''; // Clear previous results
+            
+            data.forEach((result) => {
+                // Loop through each cleanliness message and create a list item for each one
+                result.cleanliness_messages.forEach((message) => {
+                    let li = document.createElement('li');
+                    let strong = document.createElement('strong'); // Create strong element
+                    strong.textContent = message; // Set message text
+                    li.classList.add('list-group-item');
+                    li.appendChild(strong); // Append strong element to list item
+                    resultsList.appendChild(li);
+                });
+            });
+            
+            // Hide the spinner
+            spinner.classList.add('d-none');
+            // Show the results
+            resultsDiv.classList.remove('d-none');
+            // Change button text to "Hide Cleanliness"
+            button.textContent = 'Hide Cleanliness';
+            // Enable the button again
+            button.disabled = false;
+
+            // Update flag to indicate results have been fetched
+            resultsFetched = true;
+        }).catch(error => {
+            console.error('Error:', error);
+            // Hide the spinner and enable the button in case of error
+            spinner.classList.add('d-none');
+            button.disabled = false;
+            button.textContent = 'View Cleanliness';
+        });
+    } else {
+        // Results have already been fetched, toggle visibility
+        if (resultsDiv.classList.contains('d-none')) {
+            // Results are currently hidden, show them
+            resultsDiv.classList.remove('d-none');
+            // Change button text to "Hide Cleanliness"
+            button.textContent = 'Hide Cleanliness';
+        } else {
+            // Results are currently visible, hide them
+            resultsDiv.classList.add('d-none');
+            // Change button text to "View Cleanliness"
+            button.textContent = 'View Cleanliness';
+        }
+    }
+});
+    </script>
+    
+    
+    <script>
+        document.getElementById('csvIdentificationButton').addEventListener('click', function() {
+            let spinner = document.getElementById('loadingSpinner1');
+            let messagesContainer = document.getElementById('messagesContainer');
+
+            // Show spinner
+            spinner.classList.remove('d-none');
+            messagesContainer.innerHTML = ''; // Clear previous content
+            fetch('/csv_identify', {
+                method: 'POST' // Assuming you want to make a POST request
+            })
+            .then(response => response.json())
+            .then(data => {
+                spinner.classList.add('d-none');
+                if (data.error) {
+                    console.error('Error:', data.error);
+                } else {
+                    data.messages.forEach(function(message, index) {
+                        let messageBox = document.createElement('div');
+                        messageBox.className = 'message-box';
+                        if (message.includes("The following feature extraction methods were identified:")) {
+                            messageBox.innerHTML = `
+                                <div class="message-box-header" data-toggle="collapse" data-target="#featureExtraction${index}">
+                                    View Extracted Features Methods
+                                </div>
+                                <div id="featureExtraction${index}" class="collapse">
+                                    <div class="collapse-content">
+                                        <strong>${message.split(':')[0]}:</strong>
+                                        <ol>
+                                            ${message.split(':')[1].split(',').map(method => `<li>${method.trim()}</li>`).join('')}
+                                        </ol>
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            messageBox.textContent = message;
+                        }
+                        messagesContainer.appendChild(messageBox);
+                        
+                    });
+                }
+            })
+            .catch(error => {
+                spinner.classList.add('d-none');
+                console.error('Error:', error);
+            });
+        });
+
+</script>
+
     <script>
         $(document).ready(function() {
             $('.message-box-header').click(function() {
@@ -120,40 +408,39 @@ document.getElementById('getHighestAccuracyButton').addEventListener('click', fu
     fetch('/get_highest_accuracy')
     .then(response => response.json())
     .then(data => {
+        let alertBox = document.getElementById('highestAccuracyResult');
         if (data.error) {
-            document.getElementById('highestAccuracyResult').innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+            alertBox.innerHTML = `<div class="alert alert-danger alert-dismissible fade show" role="alert">
+                ${data.error}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>`;
         } else {
-            document.getElementById('highestAccuracyResult').innerHTML = `
-                <div class="alert alert-success">
-                    Highest Accuracy Model: ${data.highest_accuracy_model}<br>
-                    Accuracy: ${data.highest_accuracy}%
-                </div>`;
+            alertBox.innerHTML = `<div class="alert alert-success alert-dismissible fade show" role="alert">
+                Highest Accuracy Model: ${data.highest_accuracy_model}<br>
+                Accuracy: ${data.highest_accuracy}%
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>`;
         }
+        // Attach a click event listener to close buttons within the alertBox
+        alertBox.querySelectorAll('.close').forEach(closeButton => {
+            closeButton.onclick = () => closeButton.parentNode.style.display = 'none';
+        });
     })
     .catch(error => {
         console.error('Error:', error);
-        document.getElementById('highestAccuracyResult').innerHTML = `<div class="alert alert-danger">An error occurred while fetching the highest accuracy.</div>`;
+        document.getElementById('highestAccuracyResult').innerHTML = `<div class="alert alert-danger alert-dismissible fade show" role="alert">
+            An error occurred while fetching the highest accuracy.
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>`;
     });
 });
 
-    function fetchProgress() {
-        fetch('/progress')
-        .then(response => response.json())
-        .then(data => {
-            let progressBar = document.querySelector('.progress-bar');
-            progressBar.style.width = data.progress + '%';
-            progressBar.setAttribute('aria-valuenow', data.progress);
-            progressBar.textContent = data.progress + '%';
-
-            // Continue polling if progress is not yet 100%
-            if (data.progress < 100) {
-                setTimeout(fetchProgress, 1000); // Adjust polling interval as needed
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
-    }
 
       // Add event listeners for each button
     document.getElementById('calculateSVC').addEventListener('click', function() {
@@ -174,13 +461,31 @@ document.getElementById('getHighestAccuracyButton').addEventListener('click', fu
 
     // Function to fetch model accuracies
     function fetchModelAccuracies(endpoint) {
+    let spinner = document.getElementById('loadingSpinner2');
+    let alertContainer = document.getElementById('alertContainer');
+    // Show spinner
+    spinner.classList.remove('d-none');
+
     fetch(`/${endpoint}`, {
         method: 'POST',
         
     })
     .then(response => response.json())
     .then(data => {
+        spinner.classList.add('d-none');
         if (data.error) {
+            // Display an alert with a close button
+        let alert = document.createElement('div');
+        alert.className = 'alert alert-danger alert-dismissible fade show';
+        alert.role = 'alert';
+        alert.style.width = '50%'; // Adjust the width as needed
+        alert.style.margin = '0 auto';
+        alert.innerHTML = `
+            Please press CSV Identification first so we can model your data.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        alertContainer.innerHTML = ''; // Clear previous alerts
+        alertContainer.appendChild(alert);
             console.error('Error:', data.error);
         } else {
             // Assuming the endpoint naming follows the convention 'calculate-{modelName}'
@@ -190,6 +495,19 @@ document.getElementById('getHighestAccuracyButton').addEventListener('click', fu
         }
     })
     .catch(error => {
+        spinner.classList.add('d-none');
+        // Display an alert with a close button
+        let alert = document.createElement('div');
+        alert.className = 'alert alert-danger alert-dismissible fade show';
+        alert.role = 'alert';
+        alert.style.width = '50%'; // Adjust the width as needed
+         alert.style.margin = '0 auto';
+        alert.innerHTML = `
+            Please press CSV Identification first so we can model your data.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        alertContainer.innerHTML = ''; // Clear previous alerts
+        alertContainer.appendChild(alert);
         console.error('Error:', error);
     });
 }
@@ -200,47 +518,32 @@ function displayAccuracies(accuracies, modelName) {
     let accuraciesContainer = document.getElementById('accuraciesContainer');
     let modelPanelId = 'model-panel-' + modelName;
     let modelPanel = document.getElementById(modelPanelId);
+    const keysOrder = ['Model', 'Accuracy', 'Precision', 'Recall', 'F1 Score'];
+
 
     if (!modelPanel) {
         // If the model panel does not exist, create it
         modelPanel = document.createElement('div');
         modelPanel.id = modelPanelId;
-        modelPanel.className = 'model-accuracies-panel mt-3';
+        modelPanel.className = 'model-accuracies-panel ';
 
         let modelHeader = document.createElement('h3');
         modelHeader.textContent = modelName;
         modelPanel.appendChild(modelHeader);
 
-        let list = document.createElement('ul');
-        list.className = 'list-group';
+        let listGroup = document.createElement('ul');
+        listGroup.className = 'list-group list-group-flush';
         
-        let listItemModel = document.createElement('li');
-            listItemModel.className = 'list-group-item';
-            listItemModel.textContent = `Model: ${accuracies['Model']}`;
-            list.appendChild(listItemModel);
+        keysOrder.forEach(key => {
+            if (accuracies.hasOwnProperty(key)) { // Check if the key exists in the accuracy object
+                let listItem = document.createElement('li');
+                listItem.className = 'list-group-item';
+                listItem.textContent = `${key}: ${accuracies[key]}`;
+                listGroup.appendChild(listItem);
+            }
+        });
 
-            let listItemAccuracy = document.createElement('li');
-            listItemAccuracy.className = 'list-group-item';
-            listItemAccuracy.textContent = `Accuracy: ${accuracies['Accuracy']}%`;
-            list.appendChild(listItemAccuracy);
-
-            let listItemPrecision = document.createElement('li');
-            listItemPrecision.className = 'list-group-item';
-            listItemPrecision.textContent = `Precision: ${accuracies['Precision']}%`;
-            list.appendChild(listItemPrecision);
-
-            let listItemF1Score = document.createElement('li');
-            listItemF1Score.className = 'list-group-item';
-            listItemF1Score.textContent = `F1 Score: ${accuracies['F1 Score']}%`;
-            list.appendChild(listItemF1Score);
-
-            let listItemRecall = document.createElement('li');
-            listItemRecall.className = 'list-group-item';
-            listItemRecall.textContent = `Recall: ${accuracies['Recall']}%`;
-            list.appendChild(listItemRecall);
-
-            accuraciesContainer.appendChild(list);
-        modelPanel.appendChild(list);
+        modelPanel.appendChild(listGroup);
 
         let predictButton = document.createElement('button');
         predictButton.className = 'btn btn-info';
@@ -256,6 +559,7 @@ function displayAccuracies(accuracies, modelName) {
         toggleButton.className = 'btn btn-secondary ml-2';
         toggleButton.textContent = 'Hide';
         toggleButton.onclick = function() {
+            let list = modelPanel.querySelector('.list-group'); // Define 'list' here
             $(list).toggle();
             toggleButton.textContent = $(list).is(':visible') ? 'Hide' : 'View ' + modelName;
         };
@@ -272,15 +576,15 @@ function displayAccuracies(accuracies, modelName) {
 document.querySelectorAll('.dropdown-item').forEach(function(button) {
     button.addEventListener('click', function() {
         let modelName = button.textContent.trim();
-        let modelPanelId = 'model-panel-' + modelName.toLowerCase();
+        let modelPanelId = 'model-panel-' + modelName.toLowerCase().replace(/\s/g, ''); // Replace spaces with nothing
         let modelPanel = document.getElementById(modelPanelId);
 
         // If the model panel exists, show or hide it; otherwise, fetch the data
         if (modelPanel) {
-            let list = modelPanel.querySelector('.list-group');
-            $(list).toggle();
+            let listGroup = modelPanel.querySelector('.list-group'); // Fetch the listGroup correctly
+            $(listGroup).toggle(); // Use the fetched listGroup
             let toggleButton = modelPanel.querySelector('.btn-secondary');
-            toggleButton.textContent = $(list).is(':visible') ? 'Hide' : 'View ' + modelName;
+            toggleButton.textContent = $(listGroup).is(':visible') ? 'Hide' : 'View ' + modelName;
         } 
     });
 });
@@ -296,6 +600,9 @@ document.querySelectorAll('.dropdown-item').forEach(function(button) {
             var alertBox = document.getElementById('alertBox');
             alertBox.textContent = sessionStorage.getItem('loadingMessage');
             alertBox.style.display = 'block';
+            alertBox.style.width='25%';
+            alertBox.style.marginLeft="auto";
+            alertBox.style.marginRight="auto";
 
             // Wait for 10 seconds before updating the message
             setTimeout(function() {
@@ -314,6 +621,7 @@ document.querySelectorAll('.dropdown-item').forEach(function(button) {
     });
 </script>
     
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>
 </html>

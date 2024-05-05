@@ -58,7 +58,7 @@ from joblib import dump, load
 import stat
 
 downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-dataverse_files_folder = os.path.join(downloads_folder, "mat2")  # Combine with the folder name
+dataverse_files_folder = os.path.join(downloads_folder, "archive (3)")  # Combine with the folder name
 
 # Use glob to get a list of file paths matching a specific pattern
 file_paths = glob(os.path.join(dataverse_files_folder, '*.*'))  # Getting all files with any extension 
@@ -143,6 +143,7 @@ labels_array = []
 result_predict_train=[]
 accuracy_rf=0
 all_subjects_predictions = []
+cleanliness_messages = []
 
 # for file_path in file_paths:
 #     filename = os.path.basename(file_path)  # Extract the filename from the file path
@@ -152,6 +153,9 @@ all_subjects_predictions = []
 
 def read_eeg_file(file_path):
     try:
+        # Create a list to hold messages about data cleanliness
+        cleanliness_messages = []
+
         print(f"Entered read_eeg_file with {file_path}")
 
         # Check the file extension and read the file into a DataFrame accordingly
@@ -162,18 +166,47 @@ def read_eeg_file(file_path):
 
         else:
             print(f"Unsupported file type for {file_path}.")
-            return None, None
+            return None, None,None
         
+        
+
         print(f"Number of samples (time points) in the recording: {len(df)}")
         print("DataFrame shape:" ,df.shape)
         # unique_prefixes = get_unique_prefixes(df.columns)
         # print("Unique prefixes:", unique_prefixes)
-       
-        for col in df.columns:
-            if col.lower() in ['label', 'labels']: 
-                continue  # Skip the label columns
-            if df[col].apply(lambda x: not pd.api.types.is_number(x)).any():
-                print(f"Column '{col}' contains non-numeric values and will be removed.")
+        
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        label_cols = [col for col in df.columns if col.lower() in ['label', 'labels']]
+        columns_to_check = numeric_cols + label_cols
+
+         # Check for NaN values
+        if df[columns_to_check].isnull().values.any():
+            cleanliness_messages.append("Data contains NaN values.")
+            print("Data contains NaN values.")
+        else:
+            cleanliness_messages.append("Data does not contain NaN values")
+            print("Data does not contain NaN values")
+
+        # Check for duplicate rows
+        if df[columns_to_check].duplicated().any():
+            cleanliness_messages.append("Data contains duplicate rows.")
+            print("Data contains duplicate rows.")
+        else:
+            cleanliness_messages.append("Data does not contain duplicate rows")
+            print("Data does not contain duplicate rows")
+
+        # Check for columns with all zero variance (flatline signals)
+        if df[numeric_cols].var(axis=0).eq(0).any():
+            cleanliness_messages.append("Data contains flatline signals.")
+            print("Data contains flatline signals.")
+        else:
+            cleanliness_messages.append("Data does not contain flatline signals")
+            print("Data does not contain flatline signals")
+
+        # Remove non-numeric columns except 'label' or 'labels'
+        for col in df.select_dtypes(exclude=[np.number]).columns:
+            if col not in label_cols:
+                print(f"Column '{col}' is non-numeric and will be removed.")
                 df.drop(col, axis=1, inplace=True)
                 
         print(df.head()) 
@@ -182,7 +215,7 @@ def read_eeg_file(file_path):
 
         if check_processed_from_columns(df, processed_data_keywords):
             print("The data appears to be processed.")
-            return df, None # Return the DataFrame and None for sfreq
+            return df, None,cleanliness_messages # Return the DataFrame and None for sfreq
 
         # Check if the first column is non-numeric and should be used as the index
         if not np.issubdtype(df.iloc[:, 0].dtype, np.number):
@@ -190,6 +223,7 @@ def read_eeg_file(file_path):
         
         print(df.head())  # Displays the first 5 rows of the DataFrame
         print("DataFrame shape:" ,df.shape)
+        
 
         # Check for a 'timestamp' column and calculate sampling frequency
         timestamp_present = 'timestamp' in df.columns
@@ -197,12 +231,12 @@ def read_eeg_file(file_path):
             time_diffs = np.diff(df['timestamp'].values)
             if np.any(time_diffs == 0):
                 print("Duplicate timestamps found. Sampling frequency cannot be determined.")
-                return None, None
+                return None, None,None
             avg_sampling_period = np.mean(time_diffs)
             sfreq = 1 / avg_sampling_period  # number of samples obtained per second.
             df.drop('timestamp', axis=1, inplace=True)  # Remove timestamp for MNE
         else:
-            sfreq = 500  # You may want to adjust this default frequency
+            sfreq = 250  # You may want to adjust this default frequency
 
         eeg_data = df.values.T
 
@@ -216,11 +250,11 @@ def read_eeg_file(file_path):
         print(f"Number of samples read: {len(raw)}")
 
 
-        return raw, sfreq
+        return raw, sfreq,cleanliness_messages
 
     except Exception as e:
         print(f"An error occurred while processing {file_path}: {e}")
-        return None, None
+        return None, None,None
     
 
 def is_data_clean(df):
@@ -235,9 +269,10 @@ def is_data_clean(df):
         return False
 
     # Check for flatline signals by looking for columns with no variance
-    if (df.var() == 0).any():
+    if (df.var() != 0).any():
         print("Data contains flatline signals.")
         return False
+
     
     # If all checks pass, the data is considered clean
     return True
@@ -903,7 +938,7 @@ def csv_identification(file_paths,processed_data_keywords):
         
         # Determine the type of file and handle it accordingly
         if file_path.lower().endswith(('.csv', '.xls', '.xlsx', '.xlsm', '.xlsb')):
-            raw_data, sfreq= read_eeg_file(file_path)
+            raw_data, sfreq,cleanliness_messages= read_eeg_file(file_path)
             # picks = random.sample(raw_data.ch_names, 10)
             # plot_raw_eeg(raw_data, title=f'EEG Data from {file_path}', picks=picks)
 
@@ -3439,7 +3474,7 @@ def main():
             
             csv_only= True
             csv_test=True
-            raw_data, sfreq = read_eeg_file(file_path)
+            raw_data, sfreq,cleanliness_messages = read_eeg_file(file_path)
             # csv_features(raw_data)
             #get_label_text()
             messages,csv_only=csv_identification(file_paths,processed_data_keywords)

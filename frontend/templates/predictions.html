@@ -3,19 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <title>Prediction File Reader</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+
+    <title>EEG Hub - EEG Analysis Website</title>
+    <!-- Favicon -->
+    <link href="/static/img/favicon.ico" rel="icon">
+
+    <!-- Google Web Fonts -->
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Jost:wght@500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet"> 
+
+    <!-- Icon Font Stylesheet -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.4.1/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Libraries Stylesheet -->
+    <link href="/static/lib/owlcarousel/assets/owl.carousel.min.css" rel="stylesheet">
+    <link href="/static/lib/animate/animate.min.css" rel="stylesheet">
+    <link href="/static/lib/tempusdominus/css/tempusdominus-bootstrap-4.min.css" rel="stylesheet" />
+    <link href="/static/lib/twentytwenty/twentytwenty.css" rel="stylesheet" />
+
+    <!-- Customized Bootstrap Stylesheet -->
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Template Stylesheet -->
+    <link href="/static/css/style.css" rel="stylesheet">
     <style>
-        body {
-            font-family: Arial, sans-serif;
+        html, body {
+            height: 100%;
             margin: 0;
-            padding: 0;
-            background-color: #f0f0f0;
+        }
+
+        body {
             display: flex;
             flex-direction: column;
-            align-items: center;
-            justify-content: center;
         }
+
+        .content-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%; /* Adjust as per your layout requirements */
+        }
+        
         h1 {
             color: #333;
             margin-bottom: 20px;
@@ -136,42 +167,200 @@
         .container {
             margin-top: 20px;
         }
+        .btn-block {
+            display: block;
+            width: 100%;
+            margin-bottom: 10px; /* Spacing between buttons */
+        }
+        .btn-outline-primary {
+            border-color: #007bff;
+            color: #007bff;
+        }
+
+        .btn-outline-primary:hover {
+            background-color: #007bff;
+            color: #fff;
+        }
+
+        .btn-outline-secondary {
+            border-color: #6c757d;
+            color: #6c757d;
+            width: 20%;
+        }
+
+        .btn-outline-secondary:hover {
+            background-color: #6c757d;
+            color: #fff;
+        }
+        .footer-container {
+            width: 100%;
+            height: 80px;
+        }
+             
+
     </style>
 </head>
 <body>
+    <div class="content-wrapper">
+
+
+     <!-- Topbar Start -->
+     <div class="container-fluid bg-light ps-5 pe-0 d-none d-lg-block">
+        <div class="row gx-0">
+            <div class="col-md-6 text-center text-lg-start mb-2 mb-lg-0">
+                <div class="d-inline-flex align-items-center">
+                    <small class="py-2"><i class="far fa-clock text-primary me-2"></i>Opening Hours: Mon - Tues : 6.00 am - 10.00 pm, Sunday Closed </small>
+                </div>
+            </div>
+            <div class="col-md-6 text-center text-lg-end">
+                <div class="position-relative d-inline-flex align-items-center bg-primary text-white top-shape px-5">
+                    <div class="me-3 pe-3 border-end py-2">
+                        <p class="m-0"><i class="fa fa-envelope-open me-2"></i>info@eeghub.com</p>
+                    </div>
+                    <div class="py-2">
+                        <p class="m-0"><i class="fa fa-phone-alt me-2"></i>+012 345 6789</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Topbar End -->
+
+
+    <!-- Navbar Start -->
+    <nav class="navbar navbar-expand-lg bg-white navbar-light shadow-sm px-5 py-3 py-lg-0" style="width: 100%;">
+        <a href="index.html" class="navbar-brand p-0">
+            <h1 class="m-0 text-primary"><i class="fa fa-tooth me-2"></i>EEG Hub</h1>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarCollapse">
+            <div class="navbar-nav ms-auto py-0">
+                <a href="index" class="nav-item nav-link">Home</a>
+                <a href="about" class="nav-item nav-link">About</a>
+                <a href="service" class="nav-item nav-link active">Service</a>
+                <a href="contact" class="nav-item nav-link">Contact</a>
+            </div>
+            <button type="button" class="btn text-dark" data-bs-toggle="modal" data-bs-target="#searchModal"><i class="fa fa-search"></i></button>
+            <a href="appointment" class="btn btn-primary py-2 px-4 ms-3">Upload Your EEG Data</a>
+        </div>
+    </nav>
+    <!-- Navbar End -->
+
     <div class="container text-center">
         <h1 class="mb-4">Prediction File Reader</h1>
-        <div id="fileUploadForm">
-            <form action="/predictions" method="POST" enctype="multipart/form-data" class="mb-3">
-                <div class="form-group">
-                    <label for="file_path_predict" class="h5">Upload your EEG folder:</label>
-                    <input type="file" id="file_path_predict" name="file_path_predict" class="form-control-file" webkitdirectory directory multiple required>
-                </div>
-                <button type="submit" class="btn btn-success">Submit</button>
-            </form>
-            <button id="predictOnTrainingData" class="btn btn-primary mb-3">Predict on Training Data</button>
+        <p>Choose one of the following options to proceed:</p>
+    
+        <div class="btn-group" role="group" aria-label="Prediction Options">
+            <button type="button" class="btn btn-outline-primary" id="optionNewDataset">Option 1: Predict with a new dataset</button>
+            <button type="button" class="btn btn-outline-secondary" id="predictOnTrainingData">Option 2: Predict on the training dataset</button>
         </div>
-        <div id="predictionOptions" class="mb-3" style="display:none;">
+     
+            <div id="newDatasetForm"  style="margin-top: 2rem; display: none;width: 20%; margin-left: auto; margin-right: auto;"> <!-- w-50 sets the width to 50% of the parent -->
+                <form action="/predictions" method="POST" enctype="multipart/form-data" class="border p-4 shadow rounded bg-white">
+                    <div class="form-group">
+                        <label for="file_path_predict" class="h5">Upload your EEG Data:</label>
+                        <input type="file" id="file_path_predict" name="file_path_predict" class="form-control-file" webkitdirectory directory multiple required>
+                    </div>
+                    <!-- Spinner element (hidden by default) -->
+                    <div id="loadingSpinner" class="text-center d-none">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block mt-3">Analyze EEG Data</button>
+                </form>
+                
+            </div>
+            
+        <div id="trainingDataForm" style="margin-top: 2rem; display: none;width: 20%; margin-left: auto; margin-right: auto;">
+        </div>
+    
+        
+    </div>
+        <div id="predictionOptions" class="mb-3" style="display:none; ">
             <label for="numPredictions" class="h5">Display how many predictions?</label>
             <select id="numPredictions" class="custom-select d-inline-block w-auto mr-2">
                 <!-- Options will be dynamically added here -->
             </select>
             <button id="displayPredictionsBtn" class="btn btn-info">Display Predictions</button>
-            <button id="goBackBtn" class="btn btn-secondary ml-2">Go back Uploading New Data</button>
 
         </div>
-        <div id="predictionResults" class="predictions-container" style="display:none;">
-            <h2 class="w-100">Predictions:</h2>
-            <div id="predictionsDisplay" class="predictions-list"></div>
+        <div id="predictionResults" class="container mt-4" style="display: none;">
+            <div class="row">
+                <div class="col-lg-8 mx-auto">
+                        <div class="card-body">
+                            <h5 class="card-title text-center mb-4">Prediction Results</h5>
+                            <ul id="predictionsDisplay" class="list-group list-group-flush">
+                                <!-- Prediction items will be added here dynamically -->
+                            </ul>
+                        </div>
+                </div>
+            </div>
         </div>
         <div id="alertBox" class="alert alert-danger" role="alert" style="display:none;"></div>
     </div>
     
+    <div class="footer-container">
+    <div class="container-fluid text-light py-4" style="background: #051225; ">
+        <div class="container">
+            <div class="row g-0">
+                <div class="col-md-6 text-center text-md-start">
+                    <p class="mb-md-0">&copy; <a class="text-white border-bottom" href="#">EEG Hub 2024</a>. All Rights Reserved.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+</div>    
 
     <script>
+        
+        document.getElementById('optionNewDataset').addEventListener('click', function() {
+    var newDatasetFormDiv = document.getElementById('newDatasetForm');
+    
+    // Show the newDatasetForm div
+    if (newDatasetFormDiv) {
+        newDatasetFormDiv.style.display = 'block';
+
+    }
+
+    
+    // Also ensure the form inside is displayed
+    var formInsideNewDatasetForm = newDatasetFormDiv.querySelector('form');
+    if (formInsideNewDatasetForm) {
+        formInsideNewDatasetForm.style.display = 'block';
+
+    }
+
+    // Hide the form for training data predictions
+    document.getElementById('trainingDataForm').style.display = 'none';
+
+    // Hide the predictions results and options
+    document.getElementById('predictionResults').style.display = 'none';
+
+    document.getElementById('predictionOptions').style.display = 'none';
+
+    // Hide any alert messages
+    document.getElementById('alertBox').style.display = 'none';
+
+    // Clear any existing predictions content
+    var predictionsDisplay = document.getElementById('predictionsDisplay');
+    if (predictionsDisplay) {
+        predictionsDisplay.innerHTML = '';
+    }
+});
 
 document.getElementById('predictOnTrainingData').addEventListener('click', function () {
-    
+        // Hide the file uploader form and any prediction results or options
+        document.getElementById('newDatasetForm').style.display = 'none';
+        document.getElementById('trainingDataForm').style.display = 'block';
+        document.getElementById('predictionResults').style.display = 'none';
+        document.getElementById('predictionOptions').style.display = 'none';
+        document.getElementById('alertBox').style.display = 'none';
+        
         document.getElementById('predictionOptions').style.display = 'block';
         removeFileUploader();
         const modelName = sessionStorage.getItem('selectedModel');
@@ -198,14 +387,13 @@ document.getElementById('predictOnTrainingData').addEventListener('click', funct
         });
     });
 
-    // Event listener for the Go back button
-document.getElementById('goBackBtn').addEventListener('click', function() {
-    // Show the file upload form again
-    document.querySelector('form').style.display = 'block';
-    // Hide the prediction options
-    document.getElementById('predictionOptions').style.display = 'none';
-});
+        
+    </script>
 
+    <script>
+
+
+ 
     function preparePredictionOptions(totalPredictions) {
         // Show the prediction options
         var predictionOptions = document.getElementById('predictionOptions');
@@ -252,74 +440,96 @@ document.getElementById('goBackBtn').addEventListener('click', function() {
     // Determine the number of predictions to display
     var count = displayCount === 'all' ? data.formatted_predictions_train.length : parseInt(displayCount);
 
-    // Create a container for predictions and metrics
-    var predictionsContainer = document.createElement('div');
-    predictionsContainer.className = 'predictions-container';
+    // Create main card to hold everything
+    var card = document.createElement('div');
+    card.className = 'card';
 
-    // Display formatted predictions for training data
-    var predictionsList = document.createElement('div');
-    predictionsList.className = 'predictions-list';
-    var list = document.createElement('ul');
+    // Create card body
+    var cardBody = document.createElement('div');
+    cardBody.className = 'card-body';
 
+    // Create row within card
+    var row = document.createElement('div');
+    row.className = 'row';
+
+    // Column for predictions list
+    var predictionsCol = document.createElement('div');
+    predictionsCol.className = 'col-md-6';
+
+    // Column for metrics
+    var metricsCol = document.createElement('div');
+    metricsCol.className = 'col-md-6';
+
+    // Predictions list
+    var listGroup = document.createElement('ul');
+    listGroup.className = 'list-group list-group-flush';
     for (var i = 0; i < count; i++) {
         var listItem = document.createElement('li');
-        listItem.textContent = data.formatted_predictions_train[i];
-        list.appendChild(listItem);
+        listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+        listItem.textContent = data.formatted_predictions_train[i].split(' - ')[0];
+
+        var statusIcon = document.createElement('i');
+        if (data.formatted_predictions_train[i].includes('Correct')) {
+            statusIcon.className = 'fas fa-check-circle text-success';
+        } else {
+            statusIcon.className = 'fas fa-times-circle text-danger';
+        }
+
+        listItem.appendChild(statusIcon);
+        listGroup.appendChild(listItem);
     }
+    predictionsCol.appendChild(listGroup);
 
-    predictionsList.appendChild(list);
-    predictionsContainer.appendChild(predictionsList);
-
-    // Display prediction metrics like accuracy, precision, recall, and F1 score
+    // Check and display metrics if available
     if (data.result_predict_train) {
-        var metricsContainer = document.createElement('div');
-        metricsContainer.className = 'metrics-container';
-
-        var accuracy = document.createElement('p');
-        var precision = document.createElement('p');
-        var recall = document.createElement('p');
-        var f1Score = document.createElement('p');
-
-        accuracy.textContent = `Accuracy: ${data.result_predict_train.Accuracy[0]}%`;
-        precision.textContent = `Precision: ${data.result_predict_train.Precision[0]}%`;
-        recall.textContent = `Recall: ${data.result_predict_train.Recall[0]}%`;
-        f1Score.textContent = `F1 Score: ${data.result_predict_train['F1 Score'][0]}%`;
-
-        metricsContainer.appendChild(accuracy);
-        metricsContainer.appendChild(precision);
-        metricsContainer.appendChild(recall);
-        metricsContainer.appendChild(f1Score);
-
-        predictionsContainer.appendChild(metricsContainer);
-
-        var goBackButton = document.createElement('button');
-        goBackButton.textContent = 'Go back for selecting other model';
-        goBackButton.style.marginTop = '20px';
-        goBackButton.style.padding = '10px 15px';
-        goBackButton.style.border = 'none';
-        goBackButton.style.borderRadius = '4px';
-        goBackButton.style.backgroundColor = '#007bff';
-        goBackButton.style.color = 'white';
-        goBackButton.style.cursor = 'pointer';
-        goBackButton.addEventListener('click', function() {
-        // Set a flag in session storage indicating that the loading process has started
-        sessionStorage.setItem('loadingStatus', 'started');
-        sessionStorage.setItem('loadingMessage', 'Loading, please wait...');
-        document.getElementById('predictionsDisplay').innerHTML = "<p>Loading, please wait...</p>";
-        // Redirect to the CSV page
-        window.location.href = '/csv';
-
-        // Make the asynchronous call to the csv_features function
-        fetch('/csv_features', { method: 'POST' });
-
-    
-        });              
-        predictionsDisplay.appendChild(goBackButton);
+        var metricsList = document.createElement('ul');
+        metricsList.className = 'list-group list-group-flush';
+        var metrics = ['Accuracy', 'Precision', 'Recall', 'F1 Score'];
+        metrics.forEach(function(metric) {
+            var metricItem = document.createElement('li');
+            metricItem.className = 'list-group-item';
+            metricItem.textContent = `${metric}: ${data.result_predict_train[metric][0]}%`;
+            metricsList.appendChild(metricItem);
+        });
+        metricsCol.appendChild(metricsList);
     }
 
-    predictionsDisplay.appendChild(predictionsContainer);
+    // Append columns to row
+    row.appendChild(predictionsCol);
+    row.appendChild(metricsCol);
 
-    // Make sure to display the predictionResults div if it was previously hidden
+    // Append row to card body
+    cardBody.appendChild(row);
+
+    // Append card body to card
+    card.appendChild(cardBody);
+
+    // Append card to predictionsDisplay
+    predictionsDisplay.appendChild(card);
+
+    // Go back button
+    var goBackBtn = document.createElement('button');
+    goBackBtn.className = 'btn btn-info mt-4';
+    goBackBtn.style.width="40%";
+    goBackBtn.style.marginLeft="auto";
+    goBackBtn.style.marginRight="auto";
+    goBackBtn.textContent = 'Go back for selecting other model';
+    goBackBtn.addEventListener('click', function() {
+            // Set a flag in session storage indicating that the loading process has started
+            sessionStorage.setItem('loadingStatus', 'started');
+            sessionStorage.setItem('loadingMessage', 'Loading, please wait...');
+            document.getElementById('predictionsDisplay').innerHTML = "<p>Loading, please wait...</p>";
+            // Redirect to the CSV page
+            window.location.href = '/csv';
+
+            // Make the asynchronous call to the csv_features function
+            fetch('/csv_features', { method: 'POST' });
+        });
+
+    // Append go back button to predictionsDisplay
+    predictionsDisplay.appendChild(goBackBtn);
+
+    // Display the predictionResults container
     document.getElementById('predictionResults').style.display = 'block';
 }
 
@@ -329,68 +539,76 @@ document.getElementById('goBackBtn').addEventListener('click', function() {
         }
         
         document.querySelector('form').addEventListener('submit', function (event) {
-    event.preventDefault();
-    const formData = new FormData(this);
-    const modelName = sessionStorage.getItem('selectedModel');
-    console.log(modelName)
+            event.preventDefault();
+            const formData = new FormData(this);
+            const modelName = sessionStorage.getItem('selectedModel');
+            console.log(modelName)
+            let spinner = document.getElementById('loadingSpinner');
 
-    if (!modelName) {
-        alert('No model selected. Please go back and select a model.');
-        return;
-    }
-    formData.append('model', modelName);
 
-    fetch('/predictions', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => {
-        if (!response.ok) {
-            // If the server response is not OK, throw an error with the status text
-            return response.json().then(errorData => {
-                throw new Error(`Error: ${response.status} ${response.statusText} - ${errorData.message}`);
+            if (!modelName) {
+                alert('No model selected. Please go back and select a model.');
+                return;
+            }
+            formData.append('model', modelName);
+
+            // Show spinner
+            spinner.classList.remove('d-none');
+
+            fetch('/predictions', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    // If the server response is not OK, throw an error with the status text
+                    return response.json().then(errorData => {
+                        throw new Error(`Error: ${response.status} ${response.statusText} - ${errorData.message}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+            if (data.status === 'success' && data.file_path_csv) {
+                spinner.classList.add('d-none');
+                return fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ model: modelName, filenames: data.file_path_csv })
+                });
+            } else {
+                throw new Error(`Error processing files: ${data.message}`);
+            }
+        })
+            .then(response => {
+                if (!response.ok) {
+                    // If the server response is not OK, throw an error with the status text
+                    return response.json().then(errorData => {
+                        throw new Error(`Error: ${response.status} ${response.statusText} - ${errorData.message}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                
+                if (data.predictions_with_comparison) {
+                    console.log('Predictions with Comparison:', data.predictions_with_comparison);
+                    displayPredictions(data.predictions_with_comparison);
+                    removeFileUploader();
+                } else {
+                    throw new Error('Failed to get predictions or comparison results');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                // Display error in the UI
+                displayError(error);
+                spinner.classList.add('d-none');
+
             });
-        }
-        return response.json();
-    })
-    .then(data => {
-    if (data.status === 'success' && data.file_path_csv) {
-        return fetch('/predict', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ model: modelName, filenames: data.file_path_csv })
         });
-    } else {
-        throw new Error(`Error processing files: ${data.message}`);
-    }
-})
-    .then(response => {
-        if (!response.ok) {
-            // If the server response is not OK, throw an error with the status text
-            return response.json().then(errorData => {
-                throw new Error(`Error: ${response.status} ${response.statusText} - ${errorData.message}`);
-            });
-        }
-        return response.json();
-    })
-    .then(data => {
-        
-        if (data.predictions_with_comparison) {
-            console.log('Predictions with Comparison:', data.predictions_with_comparison);
-            displayPredictions(data.predictions_with_comparison);
-            removeFileUploader();
-        } else {
-            throw new Error('Failed to get predictions or comparison results');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        // Display error in the UI
-        displayError(error);
-    });
-});
 
 function displayError(error) {
     const errorDiv = document.getElementById('alertBox');
@@ -406,65 +624,57 @@ function displayPredictions(predictionsWithComparison) {
     
     var predictionsDisplay = document.getElementById('predictionsDisplay');
     predictionsDisplay.innerHTML = ''; // Clear previous predictions
+    var predictionCard = document.createElement('div');
+    predictionCard.className = 'card animate__animated animate__fadeIn'; // Added animate.css classes here
+
     var predictionList = document.createElement('ul');
-    predictionList.style.listStyleType = 'none';
-    predictionList.style.paddingLeft = '0';
+    predictionList.className = 'list-group list-group-flush';
 
     if (Array.isArray(predictionsWithComparison)) {
-        
         predictionsWithComparison.forEach(function(predictionWithComparison) {
             var listItem = document.createElement('li');
-            listItem.style.marginTop = '5px';
-            listItem.style.padding = '10px';
-            listItem.style.borderRadius = '4px';
-            listItem.style.border = '1px solid #ddd';
+            listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+            listItem.textContent = predictionWithComparison.split(' - ')[0];
 
-            var resultSpan = document.createElement('span');
+            var resultIcon = document.createElement('i');
             if (predictionWithComparison.includes(' - Right')) {
-                resultSpan.textContent = '✓';
-                resultSpan.style.color = 'green';
-                listItem.style.backgroundColor = 'white';
+                resultIcon.className = 'fas fa-check-circle text-success';
+                listItem.appendChild(resultIcon);
             } else {
-                resultSpan.textContent = '✗';
-                resultSpan.style.color = 'red';
-                listItem.style.backgroundColor = 'white';
+                resultIcon.className = 'fas fa-times-circle text-danger';
+                listItem.appendChild(resultIcon);
             }
 
-            listItem.textContent = predictionWithComparison.split(' - ')[0] + ' - ';
-            listItem.appendChild(resultSpan);
             predictionList.appendChild(listItem);
         });
 
-        predictionsDisplay.appendChild(predictionList);
+        predictionCard.appendChild(predictionList);
+        predictionsDisplay.appendChild(predictionCard);
 
         var goBackButton = document.createElement('button');
         goBackButton.textContent = 'Go back';
-        goBackButton.style.marginTop = '20px';
-        goBackButton.style.padding = '10px 15px';
-        goBackButton.style.border = 'none';
-        goBackButton.style.borderRadius = '4px';
-        goBackButton.style.backgroundColor = '#007bff';
-        goBackButton.style.color = 'white';
-        goBackButton.style.cursor = 'pointer';
+        goBackButton.className = 'btn btn-info mt-3';
         goBackButton.addEventListener('click', function() {
-        // Set a flag in session storage indicating that the loading process has started
-        sessionStorage.setItem('loadingStatus', 'started');
-        sessionStorage.setItem('loadingMessage', 'Loading, please wait...');
-        document.getElementById('predictionsDisplay').innerHTML = "<p>Loading, please wait...</p>";
-        // Redirect to the CSV page
-        window.location.href = '/csv';
+            // Set a flag in session storage indicating that the loading process has started
+            sessionStorage.setItem('loadingStatus', 'started');
+            sessionStorage.setItem('loadingMessage', 'Loading, please wait...');
+            document.getElementById('predictionsDisplay').innerHTML = "<p>Loading, please wait...</p>";
+            // Redirect to the CSV page
+            window.location.href = '/csv';
 
-        // Make the asynchronous call to the csv_features function
-        fetch('/csv_features', { method: 'POST' });
+            // Make the asynchronous call to the csv_features function
+            fetch('/csv_features', { method: 'POST' });
 
-    
-        });              
+        
+            });              
         predictionsDisplay.appendChild(goBackButton);
             
         
     } else {
-        // Handle cases where predictions is not an object
-        predictionsDisplay.innerHTML = "<p>Unsupported prediction format or missing comparison results.</p>";
+        var errorMessage = document.createElement('div');
+        errorMessage.className = 'alert alert-warning';
+        errorMessage.textContent = 'Unsupported prediction format or missing comparison results.';
+        predictionsDisplay.appendChild(errorMessage);
     }
 
     document.getElementById('predictionResults').style.display = 'block';
@@ -483,6 +693,7 @@ function removeFileUploader() {
    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+   
 
 
 

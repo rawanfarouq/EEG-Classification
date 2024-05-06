@@ -168,6 +168,7 @@ def allfeatures(FS, headers, csv_path):
     return csvpath
 
 subbands = [(0.5, 4), (4, 8), (8, 12), (12, 30), (30, 100)]
+best = [0,0,0,0,0,0]
 
 def filtering(data, fs, lowcut, highcut, order=5):
     nyquist = 0.5 * fs
@@ -187,11 +188,15 @@ def filtering(data, fs, lowcut, highcut, order=5):
 def extract_features(file_paths):
     allf = []
     feat = []
+    threads = []
+
     for path in file_paths:
         headers = []
         eegData, labels = loadData(path)
         feat, headers = features(eegData, labels)
         allf.append(pd.DataFrame(feat))
+    allfeatures(allf, headers, 'allfeatures.csv')
+
     for band_idx, (lowcut, highcut) in enumerate(subbands, start=1):
         subfeatures = []
         for path in file_paths:
@@ -203,23 +208,44 @@ def extract_features(file_paths):
         csv_path = f'subband_{band_idx}_features.csv'
         allfeatures(subfeatures, headers, csv_path)
 
-    allfeatures(allf, headers, 'allfeatures.csv')
-    choosebest()
-    return csv_path
+    thread_allfeatures = threading.Thread(target=classification, args=(0,))
+    thread_allfeatures.start()
+    threads.append(thread_allfeatures)
 
-def choosebest():
-    best = -99999999
-    for path in csvpaths:
-        accuracy = classification(path)
-        if accuracy > best:
-            best = accuracy
-            bestpath = path
-    print(best)
-    print(bestpath)
+    thread_subband_1_features = threading.Thread(target=classification, args=(1,))
+    thread_subband_1_features.start()
+    threads.append(thread_subband_1_features)
+
+    thread_subband_2_features = threading.Thread(target=classification, args=(2,))
+    thread_subband_2_features.start()
+    threads.append(thread_subband_2_features)
+
+    thread_subband_3_features = threading.Thread(target=classification, args=(3,))
+    thread_subband_3_features.start()
+    threads.append(thread_subband_3_features)
+
+    thread_subband_4_features = threading.Thread(target=classification, args=(4,))
+    thread_subband_4_features.start()
+    threads.append(thread_subband_4_features)
+
+    thread_subband_5_features = threading.Thread(target=classification, args=(5,))
+    thread_subband_5_features.start()
+    threads.append(thread_subband_5_features)
+
+    for thread in threads:
+        thread.join()
+
+    max = best[0]
+    bestpath = csvpaths[0]
+    for i in range(1,6):
+        if best[i]>max:
+            max = best[i]
+            bestpath = csvpaths[i]
+    print(max, " for ", bestpath)
     return bestpath
 
-def classification(csvpath):
-    df = pd.read_csv(csvpath)
+def classification(index):
+    df = pd.read_csv(csvpaths[index])
 
     X = df.drop(columns=['Label']) 
     y = df['Label']
@@ -229,6 +255,5 @@ def classification(csvpath):
     svm_classifier.fit(X_train, y_train)
 
     y_pred = svm_classifier.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    print("Accuracy of " , csvpath, " :", accuracy)
-    return accuracy
+    best[index] = accuracy_score(y_test, y_pred)
+    print("Accuracy of " , csvpaths[index], " :", best[index])

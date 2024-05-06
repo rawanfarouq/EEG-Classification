@@ -125,6 +125,14 @@
         .footer-container {
             width: 100%;
         }
+        #highestAccuracyResult {
+        max-width: 400px; /* Adjust the max-width as needed */
+        width: auto;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center; /* Center the text inside the alert */
+    }
+     
     </style>
 </head>
 <body>
@@ -203,13 +211,14 @@
             <ul id="stepsList"></ul>
             <p id="noSteps" class="no-steps">No preprocessing steps available.</p>
         </div>
-            <button id="extractFeaturesButton" class="btn btn-success my-2 mr-2" onclick="extractFeatures()" style="display: none;">Extract CSP Features</button>
-            <div id="loadingSpinner1" class="text-center" style="display: none;">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-            </div>
+           
             <div class="row justify-content-center">
+                <button id="extractFeaturesButton" class="btn btn-success my-2 mr-2" onclick="extractFeatures()" style="display: none; ">Extract CSP Features</button>
+                <div id="loadingSpinner1" class="text-center" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
                 <div class="col-lg-8 col-md-10">
                     <div id="cspFeaturesContainer" class="card mt-4" style="display: none;">
                         <div class="card-header bg-primary text-white">
@@ -239,14 +248,43 @@
                         <option value="cnn">CNN Model</option>
                     </select>
                 </div>
+                <!-- Spinner element (hidden by default) -->
+                <div id="loadingSpinner2" class="text-center d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
                 <div class="mt-3 d-grid gap-2" >
                     <button id="fetchAccuracyButton" class="btn btn-info" type="button" onclick="fetchModelAccuracy()">Get Accuracy</button>
-                    <button id="toggleAccuracyButton" class="btn btn-info" type="button" onclick="toggleAccuracyContainer()" style="display: none;">Hide Accuracy Results</button>
-                    <button id="predictButton" class="btn btn-warning" type="button" onclick="redirectToPredictPage()" style="display: none;">Predict</button>
+                </div>
+                <div class="mt-3 d-grid gap-3" >          
+                    <button type="button"  id="getHighestAccuracyButton" class="btn btn-outline-primary">Get Highest Accuracy</button>
+                    <div id="highestAccuracyResult" class="mt-2"></div>
                 </div>
             </form>
-            <div id="accuracyContainer" class="mt-4" style="display: none; ">
-                <ul id="accuracyList" class="list-group"></ul>
+            <!-- Add this for each model -->
+            <div id="accuracyContainer-svc" class="mt-4" style="display: none;">
+                <ul id="accuracyList-svc" class="list-group"></ul>
+                <button id="predictButton-svc" class="btn btn-outline-dark" type="button" onclick="redirectToPredictPage('svc')" style="display: none;">Predict SVC Model</button>
+
+            </div>
+            <div id="accuracyContainer-random" class="mt-4" style="display: none;">
+                <ul id="accuracyList-random" class="list-group"></ul>
+                <button id="predictButton-random" class="btn btn-outline-dark" type="button" onclick="redirectToPredictPage('random')" style="display: none;">Predict Random Forest Model</button>
+
+            </div>
+            <div id="accuracyContainer-logistic" class="mt-4" style="display: none;">
+                <ul id="accuracyList-logistic" class="list-group"></ul>
+                <button id="predictButton-logistic" class="btn btn-outline-dark" type="button" onclick="redirectToPredictPage('logistic')" style="display: none;">Predict Logistic Regression Model</button>
+                
+            </div>
+            <div id="accuracyContainer-knn" class="mt-4" style="display: none;">
+                <ul id="accuracyList-knn" class="list-group"></ul>
+                <button id="predictButton-knn" class="btn btn-outline-dark" type="button" onclick="redirectToPredictPage('knn')" style="display: none;">Predict KNN Model</button>
+            </div>
+            <div id="accuracyContainer-cnn" class="mt-4" style="display: none;">
+                <ul id="accuracyList-cnn" class="list-group"></ul>
+                <button id="predictButton-cnn" class="btn btn-outline-dark" type="button" onclick="redirectToPredictPage('cnn')" style="display: none;">Predict CNN Model</button>
             </div>
         </div>
     <div id="alertBox" class="alert" style="display:none;"></div> <!-- Make sure this element exists -->
@@ -273,6 +311,50 @@
         </div>
 
 <script>
+
+    // JavaScript code to handle the "Get Highest Accuracy" button click
+document.getElementById('getHighestAccuracyButton').addEventListener('click', function() {
+    event.preventDefault(); // This will prevent the default form submission behavior
+
+    fetch('/get_highest_accuracy')
+    .then(response => response.json())
+    .then(data => {
+        let alertBox = document.getElementById('highestAccuracyResult');
+        if (data.error) {
+            alertBox.innerHTML = `<div class="alert alert-danger alert-dismissible fade show" role="alert">
+                ${data.error}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>`;
+        } else {
+            alertBox.innerHTML = `<div class="alert alert-success alert-dismissible fade show" role="alert">
+                Highest Accuracy Model: ${data.highest_accuracy_model}<br>
+                Accuracy: ${data.highest_accuracy}%
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>`;
+        }
+        // Attach a click event listener to close buttons within the alertBox
+        alertBox.querySelectorAll('.close').forEach(closeButton => {
+            closeButton.onclick = () => closeButton.parentNode.style.display = 'none';
+        });
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('highestAccuracyResult').innerHTML = `<div class="alert alert-danger alert-dismissible fade show" role="alert">
+            An error occurred while fetching the highest accuracy.
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>`;
+    });
+});
+
+
+
+
     document.addEventListener("DOMContentLoaded", function() {
         var loadingStatus = sessionStorage.getItem('loadingStatus');
 
@@ -440,16 +522,16 @@ function displayLoadingAccuracy() {
     accuracyList.appendChild(loadingMessage);
 }
 
-function displayAccuracyResults(accuracyData) {
-    var accuracyContainer = document.getElementById('accuracyContainer');
-    var accuracyList = document.getElementById('accuracyList');
-    var toggleAccuracyButton = document.getElementById('toggleAccuracyButton');
+function displayAccuracyResults(model, accuracyData) {
+    var accuracyContainer = document.getElementById('accuracyContainer-' + model);
+    var accuracyList = document.getElementById('accuracyList-' + model);
+    var predictButton = document.getElementById('predictButton-' + model);
 
     // Clear previous results and set the display style
     accuracyList.innerHTML = '';
     accuracyContainer.style.display = 'block';
-    toggleAccuracyButton.style.display = 'block';
-    toggleAccuracyButton.textContent = 'Hide Accuracy Results';
+    predictButton.style.display = 'block';
+
 
     // Create a list item for each accuracy message and append it to the list
     accuracyData.forEach(function(accuracyMessage) {
@@ -461,7 +543,7 @@ function displayAccuracyResults(accuracyData) {
         li.innerHTML = formattedMessage; // Set the HTML content of the list item
         accuracyList.appendChild(li); // Append the list item to the list
     });
-    document.getElementById('predictButton').style.display = 'block';
+    document.getElementById('predictButton-' + model).style.display = 'block';
 
 }
 
@@ -498,24 +580,13 @@ function displaySuccessMessage(message) {
         errorMessage.innerHTML = '<div class="mt-3 p-3 bg-danger text-white rounded">' + message + '</div>';
     }
 
-    function toggleAccuracyContainer() {
-        var accuracyContainer = document.getElementById('accuracyContainer');
-        var toggleAccuracyButton = document.getElementById('toggleAccuracyButton');
-
-        // Check the current display state and toggle it
-        if (accuracyContainer.style.display === 'none' || accuracyContainer.style.display === '') {
-            accuracyContainer.style.display = 'block';
-            toggleAccuracyButton.textContent = 'Hide Accuracy Results';
-        } else {
-            accuracyContainer.style.display = 'none';
-            toggleAccuracyButton.textContent = 'View Accuracy Results';
-        }
-    }
+    
 
     function fetchModelAccuracy() {
     var modelSelect = document.getElementById('modelSelect');
     var model = modelSelect.value;
     var url = '';
+    let spinner = document.getElementById('loadingSpinner2');
 
     
     if (!model) {
@@ -524,14 +595,24 @@ function displaySuccessMessage(message) {
     }
     // Determine which URL to use based on the selected model
     if (model === 'svc') {
+         // Show spinner
+        spinner.classList.remove('d-none');
         url = '{{ url_for("file_reader.perform_mat_modeling_svc") }}';
     } else if (model === 'random') {
+         // Show spinner
+         spinner.classList.remove('d-none');
         url = '{{ url_for("file_reader.perform_mat_modeling_random") }}';
     } else if (model === 'logistic') {
+         // Show spinner
+         spinner.classList.remove('d-none');
         url = '{{ url_for("file_reader.perform_mat_modeling_logistic") }}';
     }else if (model === 'knn') {
+         // Show spinner
+         spinner.classList.remove('d-none');
         url = '{{ url_for("file_reader.perform_mat_modeling_knn") }}';
     }else if (model === 'cnn') {
+         // Show spinner
+         spinner.classList.remove('d-none');
         url = '{{ url_for("file_reader.perform_mat_modeling_cnn") }}';
     }
     
@@ -546,26 +627,26 @@ function displaySuccessMessage(message) {
         return response.json();
     }).then(data => {
         if (data.accuracy) {
-            displayAccuracyResults(data.accuracy);
+             // Show spinner
+             spinner.classList.add('d-none');
+            displayAccuracyResults(model, data.accuracy); // Pass the selected model to the function
         } else {
             displayErrorMessage('No accuracy results received from server.');
         }
     }).catch(error => {
+         // Show spinner
+         spinner.classList.add('d-none');
         console.error('Error:', error);
         displayErrorMessage('Error fetching accuracy results.');
     });
 }
 
-function redirectToPredictPage() {
-    var modelSelect = document.getElementById('modelSelect');
-    var selectedModel = modelSelect.value;
-    if (selectedModel) {
-        window.location.href = '{{ url_for("mat_predict") }}?model=' + encodeURIComponent(selectedModel);
-    } else {
-        // Handle the case where no model is selected before redirecting
-        displayErrorMessage('Please select a model.');
-    }
+
+function redirectToPredictPage(model) {
+    window.location.href = '{{ url_for("mat_predict") }}?model=' + encodeURIComponent(model);
 }
+
+
 
    
 </script>

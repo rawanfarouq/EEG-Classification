@@ -5,9 +5,12 @@ import numpy as np
 import pandas as pd
 import random
 import scipy.io
+import ipywidgets as widgets
 import h5py
 import re
 import matplotlib.pyplot as plt
+from IPython.display import display
+from PyQt5.QtWidgets import QApplication
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier,RandomForestRegressor
 from sklearn.ensemble import GradientBoostingClassifier
@@ -58,7 +61,7 @@ from joblib import dump, load
 import stat
 
 downloads_folder = os.path.expanduser("~/Downloads")  # Get the path to the "Downloads" directory
-dataverse_files_folder = os.path.join(downloads_folder, "archive (3)")  # Combine with the folder name
+dataverse_files_folder = os.path.join(downloads_folder, "mat2")  # Combine with the folder name
 
 # Use glob to get a list of file paths matching a specific pattern
 file_paths = glob(os.path.join(dataverse_files_folder, '*.*'))  # Getting all files with any extension 
@@ -130,7 +133,7 @@ model_knn = os.path.join(model_directory, 'knn_model.joblib')
 model_cnn = os.path.join(model_directory, 'cnn_model.joblib')
 encoder_path = os.path.join(model_directory, 'label_encoder.joblib')
 scaler_path = os.path.join(model_directory, 'scaler.joblib')
-y_original = None # original labels: the last column
+y_original = [] # original labels: the last column
 model_directory_mat = 'saved_models_mat'
 os.makedirs(model_directory_mat, exist_ok=True)
 
@@ -380,10 +383,9 @@ def read_mat_eeg(file_path):
     
     
 def visualize_3d_brain_model(raw):
-
     
     # Define the correct mapping from the current channel names to the desired channel names
-    channel_mapping = {'EEG 0': 'Fp1','EEG 1': 'Fp2','EEG 2': 'F7','EEG 3': 'F3',
+    channel_mapping1 = {'EEG 0': 'Fp1','EEG 1': 'Fp2','EEG 2': 'F7','EEG 3': 'F3',
                      'EEG 4': 'Fz','EEG 5': 'F4', 'EEG 6': 'F8', 'EEG 7': 'FC5','EEG 8': 'FC1',
                     'EEG 9': 'FC2','EEG 10': 'FC6', 'EEG 11': 'T3',
                     'EEG 12': 'C3','EEG 13': 'Cz', 'EEG 14': 'C4', 'EEG 15': 'T4',
@@ -394,7 +396,7 @@ def visualize_3d_brain_model(raw):
     
 
    # Rename the channels in the raw object
-    raw.rename_channels(channel_mapping)
+    raw.rename_channels(channel_mapping1)
 
     # Set the montage (standard 10-20 system) for EEG data after renaming channels
     montage = mne.channels.make_standard_montage('standard_1020')
@@ -422,7 +424,7 @@ def visualize_3d_brain_model(raw):
         if not os.path.isfile(full_path):
             print(f'Missing file: {full_path}')
 
-    mne.viz.set_3d_backend('notebook')        
+    mne.viz.set_3d_backend('pyvista')        
     
     # Plot the sensor locations, including the head surface
     fig = mne.viz.plot_alignment(
@@ -430,17 +432,53 @@ def visualize_3d_brain_model(raw):
         trans='fsaverage',
         subject=subject,
         subjects_dir=subjects_dir,
-        dig=True,
-        eeg=['original', 'projected'],
-        show_axes=True,
+        #dig=True,
+        eeg=['projected'],
+        #show_axes=True,
         surfaces='head-dense',  # Use a denser head surface for better visualization (can be changed to 'head' for sparser)
        
     )
 
-    # Set the 3D view of the figure
+     # Set the 3D view of the figure
     mne.viz.set_3d_view(figure=fig, azimuth=90, elevation=90, distance=0.6)
 
+# Extract the 3D positions of the EEG sensors and their corresponding names
+    ch_pos = {ch_name: raw.info['chs'][idx]['loc'][:3] for idx, ch_name in enumerate(raw.info['ch_names'])}
+
+    # Get the PyVista plotter from the figure
+    plotter = fig.plotter
+
+    # Offset for text annotation
+    offset = np.array([0.0, -0.02, -0.012])  # Adjust this offset as needed
+
+    label_actors = {}
+   
+
+    # Loop through each channel position and add a text label to the plotter
+    for ch_name, pos in ch_pos.items():
+        # Apply an offset to each position for better visibility
+        text_pos = pos + offset
+        # Here, pos is a NumPy array with 3 elements: x, y, and z
+        plotter.add_point_labels([text_pos], [ch_name], point_size=20, font_size=20, text_color='black')
+        
+
+    # Render the plotter to show the text annotations
+    plotter.render()
+    plt.show()
+
+    # Wait for the plot to be closed
+    plt.waitforbuttonpress()
+    
+
     return fig
+
+def get_sensor_positions(raw):
+    positions = {}
+    for ch in raw.info['chs']:
+        if ch['ch_name'].startswith('EEG'):
+            positions[ch['ch_name']] = ch['loc'][:3].tolist()
+    return positions
+
 
 def add_preprocessing_step(step_description, preprocessing_steps):
     preprocessing_steps.add(step_description)
@@ -1232,6 +1270,7 @@ def csv_modeling():
 
 labels_text_array=[]
 def csv_svc_model_new(label_conditions_path):
+    global y_original
     print("Length of all_features: ", len(all_features))
     print("Length of labels_list: ", len(labels_list))   
     labels_text_array=[]
@@ -2072,6 +2111,8 @@ def load_and_predict_svc(new_data, label_conditions):
     # Dictionary to store all formatted predictions
     #model_svc_csv_prediction = {}
 
+    print("y original:",len(y_original))
+
     for model_name, model_path in model_paths.items():
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Could not find the model at the specified path: {model_path}")
@@ -2080,6 +2121,9 @@ def load_and_predict_svc(new_data, label_conditions):
 
 
         numeric_predictions = model_loaded.predict(new_data_scaled)
+
+        if len(y_original) > len(numeric_predictions):
+            y_original = y_original[:len(numeric_predictions)]
 
         # Convert numeric predictions to labels
         inverse_transformed = label_encoder.inverse_transform(numeric_predictions)
@@ -2095,6 +2139,10 @@ def load_and_predict_svc(new_data, label_conditions):
         
         # Store the formatted predictions in the dictionary
         formatted_model_predictions[model_name] = formatted_predictions
+
+    accuracy = accuracy_score(y_original, numeric_predictions)
+    print("accuracy pred true:",accuracy)
+    
 
     # Store all formatted predictions in the dictionary
     for model_name, formatted_predictions in formatted_model_predictions.items():
@@ -3517,21 +3565,20 @@ def main():
                 raw_data, sfreq, labels= read_mat_eeg(file_path) # Handling .mat file 
 
                 
-                #fig = visualize_3d_brain_model(raw_data)
-                preprocessed_raw ,preprocessing_steps= preprocess_raw_eeg(raw_data, 250,subject_identifier)
+                # preprocessed_raw ,preprocessing_steps= preprocess_raw_eeg(raw_data, 250,subject_identifier)
 
-                for step in preprocessing_steps:
-                    print(step)
+                # for step in preprocessing_steps:
+                #     print(step)
 
 
-                #features_df = extract_features_mat(preprocessed_raw, sfreq, labels,epoch_length=1.0)
-                message,features_df = extract_features_csp(preprocessed_raw, sfreq, labels, epoch_length=1.0)
+                # #features_df = extract_features_mat(preprocessed_raw, sfreq, labels,epoch_length=1.0)
+                # message,features_df = extract_features_csp(preprocessed_raw, sfreq, labels, epoch_length=1.0)
 
-                print(message)
+                # print(message)
                 
-                accuracy_test=mat_modeling_svc(subject_identifier,features_df,labels)
-                predictions_info = train_test_split_models(subject_identifier, features_df,model_name='svc' ,labels=labels)
-                print(predictions_info)
+                # accuracy_test=mat_modeling_svc(subject_identifier,features_df,labels)
+                # predictions_info = train_test_split_models(subject_identifier, features_df,model_name='svc' ,labels=labels)
+                # print(predictions_info)
                 # for info in predictions_info:
                 #     print(info)
                 #print(f"Test accuracy: {test_accuracy * 100:.2f}%")
@@ -3582,6 +3629,9 @@ def main():
             print(f"Subject {subject} Accuracy GradientBoosting: {average_accuracy_dict_gbc[subject] * 100:.2f}%")
             print(f"Subject {subject} Accuracy KNN: {average_accuracy_dict_knn[subject] * 100:.2f}%")
     
+    
+    fig = visualize_3d_brain_model(raw_data)
+
 
     # else:        
     # # This part should be outside (below) the for loop that goes through file_paths

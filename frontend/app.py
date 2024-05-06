@@ -79,6 +79,7 @@ def predictions():
 @app.route('/mat_predict')
 def mat_predict():
      return render_template('mat_predict.html')
+
     
 
 def open_browser():

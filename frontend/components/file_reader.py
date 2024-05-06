@@ -6,7 +6,7 @@ import mne
 import numpy as np
 import tempfile
 import pandas as pd 
-import traceback, shutil,tempfile, logging
+import traceback, shutil,tempfile, logging, json
 
 
 bp_file_reader = Blueprint('file_reader', __name__)
@@ -94,7 +94,7 @@ def upload():
                 return render_template('alert.html', message="Unsupported file type", alert_type='danger')
 
         if mat_file_paths:
-            #extract_features(mat_file_paths)
+            extract_features(mat_file_paths)
             session['mat_file_paths'] = mat_file_paths
             print("MAT file paths stored in session:", mat_file_paths)
             # Redirect to mat_classification only if mat files are uploaded and no other types are present
@@ -117,6 +117,7 @@ def upload():
     else:
         return render_template("upload.html")
     
+
 
 @bp_file_reader.route('/check_csv', methods=['GET', 'POST'])
 def check_csv():
@@ -377,6 +378,13 @@ def mat_classification():
                 accuracy_messages,label_get= mat_modeling_svc(subject_identifier, features_df, labels)
                 labels_message.append(label_get)
                 some_directory = "E:\\EEG-Classification"
+                if not os.path.exists(some_directory):
+                    # If it doesn't exist, use the Downloads folder as a fallback
+                    home_dir = os.path.expanduser("~")  # Get the home directory
+                    some_directory = os.path.join(home_dir, 'Downloads')
+
+                # Make sure the fallback directory exists or create it
+                os.makedirs(some_directory, exist_ok=True)
                 csv_path = os.path.join(some_directory, f"{subject_identifier}_features.csv")
                 features_df.to_csv(csv_path, index=False)
                 features_csv_paths.append((subject_identifier, csv_path))
@@ -395,6 +403,13 @@ def mat_classification():
             # Store labels in session
             session['labels'] = labels
             some_directory = "E:\\EEG-Classification"  # Ensure this directory exists and has write permissions
+            if not os.path.exists(some_directory):
+                # If it doesn't exist, use the Downloads folder as a fallback
+                home_dir = os.path.expanduser("~")  # Get the home directory
+                some_directory = os.path.join(home_dir, 'Downloads')
+
+            # Make sure the fallback directory exists or create it
+            os.makedirs(some_directory, exist_ok=True)
             raw_file_path = os.path.join(some_directory, f"{subject_identifier}_preprocessed_raw.fif")
             preprocessed_raw.save(raw_file_path, overwrite=True)
 
@@ -490,6 +505,23 @@ def perform_mat_modeling_svc():
         # Call the mat_modeling function
         accuracy_messages,labels_message= mat_modeling_svc(subject_identifier, features_df, labels)
 
+        accuracy_value = None
+        for message in accuracy_messages:
+            if 'Accuracy' in message:
+                # Extract the accuracy percentage from the string
+                accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
+                try:
+                    accuracy_value = float(accuracy_str)
+                except ValueError:
+                    # Handle the exception if the conversion fails
+                    print(f"Could not convert accuracy to float: '{accuracy_str}'")
+                break  # Assuming we only need the first occurrence
+
+        if accuracy_value is None:
+            raise ValueError("Accuracy value was not found in accuracy messages.")
+        #Store the accuracy, so you can get the highest accuracy
+        session['model_accuracies']['SVC'] = accuracy_value
+
         # Store the accuracy messages in the session or pass to the template
         session['accuracy_messages'] = accuracy_messages
         
@@ -515,6 +547,23 @@ def perform_mat_modeling_random():
         # Call the mat_modeling function
         accuracy_messages,labels_message = mat_modeling_random(subject_identifier, features_df, labels)
 
+        accuracy_value = None
+        for message in accuracy_messages:
+            if 'Accuracy' in message:
+                # Extract the accuracy percentage from the string
+                accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
+                try:
+                    accuracy_value = float(accuracy_str)
+                except ValueError:
+                    # Handle the exception if the conversion fails
+                    print(f"Could not convert accuracy to float: '{accuracy_str}'")
+                break  # Assuming we only need the first occurrence
+
+        if accuracy_value is None:
+            raise ValueError("Accuracy value was not found in accuracy messages.")
+        #Store the accuracy, so you can get the highest accuracy
+        session['model_accuracies']['Random'] = accuracy_value
+
         # Store the accuracy messages in the session or pass to the template
         session['accuracy_messages'] = accuracy_messages
         
@@ -539,6 +588,23 @@ def perform_mat_modeling_logistic():
 
         # Call the mat_modeling function
         accuracy_messages,labels_message = mat_modeling_logistic(subject_identifier, features_df, labels)
+
+        accuracy_value = None
+        for message in accuracy_messages:
+            if 'Accuracy' in message:
+                # Extract the accuracy percentage from the string
+                accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
+                try:
+                    accuracy_value = float(accuracy_str)
+                except ValueError:
+                    # Handle the exception if the conversion fails
+                    print(f"Could not convert accuracy to float: '{accuracy_str}'")
+                break  # Assuming we only need the first occurrence
+
+        if accuracy_value is None:
+            raise ValueError("Accuracy value was not found in accuracy messages.")
+        #Store the accuracy, so you can get the highest accuracy
+        session['model_accuracies']['Logistic'] = accuracy_value
 
         # Store the accuracy messages in the session or pass to the template
         session['accuracy_messages'] = accuracy_messages
@@ -566,6 +632,23 @@ def perform_mat_modeling_knn():
         # Call the mat_modeling function
         accuracy_messages,labels_message = mat_modeling_knn(subject_identifier, features_df, labels)
 
+        accuracy_value = None
+        for message in accuracy_messages:
+            if 'Accuracy' in message:
+                # Extract the accuracy percentage from the string
+                accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
+                try:
+                    accuracy_value = float(accuracy_str)
+                except ValueError:
+                    # Handle the exception if the conversion fails
+                    print(f"Could not convert accuracy to float: '{accuracy_str}'")
+                break  # Assuming we only need the first occurrence
+
+        if accuracy_value is None:
+            raise ValueError("Accuracy value was not found in accuracy messages.")
+        #Store the accuracy, so you can get the highest accuracy
+        session['model_accuracies']['KNN'] = accuracy_value
+
         # Store the accuracy messages in the session or pass to the template
         session['accuracy_messages'] = accuracy_messages
         
@@ -590,6 +673,23 @@ def perform_mat_modeling_cnn():
 
         # Call the mat_modeling function
         accuracy_messages,labels_message= mat_modeling_cnn(subject_identifier, features_df, labels)
+
+        accuracy_value = None
+        for message in accuracy_messages:
+            if 'Accuracy' in message:
+                # Extract the accuracy percentage from the string
+                accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
+                try:
+                    accuracy_value = float(accuracy_str)
+                except ValueError:
+                    # Handle the exception if the conversion fails
+                    print(f"Could not convert accuracy to float: '{accuracy_str}'")
+                break  # Assuming we only need the first occurrence
+
+        if accuracy_value is None:
+            raise ValueError("Accuracy value was not found in accuracy messages.")
+        #Store the accuracy, so you can get the highest accuracy
+        session['model_accuracies']['CNN'] = accuracy_value
 
         # Store the accuracy messages in the session or pass to the template
         session['accuracy_messages'] = accuracy_messages
@@ -940,6 +1040,13 @@ def mat_preprocess_predict():
 
             # Store labels in session
             some_directory = "E:\\EEG-Classification"  # Ensure this directory exists and has write permissions
+            if not os.path.exists(some_directory):
+                # If it doesn't exist, use the Downloads folder as a fallback
+                home_dir = os.path.expanduser("~")  # Get the home directory
+                some_directory = os.path.join(home_dir, 'Downloads')
+
+            # Make sure the fallback directory exists or create it
+            os.makedirs(some_directory, exist_ok=True)
             raw_file_path_predict = os.path.join(some_directory, f"{subject_identifier}_preprocessed_predict.fif")
             preprocessed_raw_predict.save(raw_file_path_predict, overwrite=True)
 

@@ -176,6 +176,8 @@ def allfeatures(FS, headers, csv_path):
 
 subbands = [(0, 100), (0.5, 4), (4, 8), (8, 12), (12, 30), (30, 100)]
 best = [0,0,0,0,0,0]
+subfeatures = [[] for _ in range(6)]
+subheaders = [[] for _ in range(6)]
 
 def filtering(data, fs, lowcut, highcut, order=5):
     nyquist = 0.5 * fs
@@ -192,20 +194,32 @@ def filtering(data, fs, lowcut, highcut, order=5):
     
     return filtered_data
 
+def extract_freq(band_idx, lowcut, highcut, eegData, labels):
+    print('freq', band_idx, 'start')
+    if band_idx == 0:
+        filtered_data = eegData
+    else:
+        filtered_data = filtering(eegData, fs=250, lowcut=lowcut, highcut=highcut)
+    subband_features, subband_headers = features(filtered_data, labels)
+    subfeatures[band_idx].append(pd.DataFrame(subband_features))
+    subheaders[band_idx] = subband_headers
+
 def extract_features(file_paths):
     threads = []
-    for band_idx, (lowcut, highcut) in enumerate(subbands, start=0):
-        subfeatures = []
-        for path in file_paths:
-            eegData, labels = loadData(path)
-            if band_idx == 0:
-                filtered_data = eegData
-            else:
-                filtered_data = filtering(eegData, fs=500, lowcut=lowcut, highcut=highcut)
-            subband_features, subband_headers = features(filtered_data, labels)
-            subfeatures.append(pd.DataFrame(subband_features))
+    
+    for path in file_paths:
+        eegData, labels = loadData(path)
+        for band_idx, (lowcut, highcut) in enumerate(subbands, start=0):
+            name = 'freqthread_', band_idx, path
+            name = threading.Thread(target=extract_freq, args=(band_idx, lowcut, highcut, eegData, labels))
+            name.start()
+            threads.append(name)
+        for thread in threads:
+            thread.join()
+
+    for band_idx in range(len(subbands)):
         csv_path = f'subband_{band_idx}_features.csv'
-        allfeatures(subfeatures, subband_headers, csv_path)
+        allfeatures(subfeatures[band_idx], subheaders[band_idx], csv_path)
 
     for index in range(0,6):
         name = 'thread_', index

@@ -1,7 +1,18 @@
-from flask import Blueprint, render_template, request, jsonify, flash,redirect,url_for, session
+from flask import Blueprint, render_template, request, jsonify, flash,redirect,url_for, session,send_file
 from werkzeug.utils import secure_filename
+from collections import Counter
+from sklearn.metrics import confusion_matrix
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.colors import blue, red, green, purple,black,blueviolet
+from reportlab.pdfgen import canvas
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate,Spacer , Table,TableStyle
+from reportlab.lib import colors
+from reportlab.graphics.charts.barcharts import VerticalBarChart
+from reportlab.graphics.shapes import Drawing
 import sys
 import os
+import io
 import mne
 import numpy as np
 import tempfile
@@ -94,7 +105,7 @@ def upload():
                 return render_template('alert.html', message="Unsupported file type", alert_type='danger')
 
         if mat_file_paths:
-            extract_features(mat_file_paths)
+            #extract_features(mat_file_paths)
             session['mat_file_paths'] = mat_file_paths
             print("MAT file paths stored in session:", mat_file_paths)
             # Redirect to mat_classification only if mat files are uploaded and no other types are present
@@ -222,7 +233,9 @@ def calculate_svc():
             raise ValueError("No label conditions file found.")
 
         print("labels_original", labels_original)
-        accuracies, results, labels_array_original = csv_svc_model_new(labels_original)
+        accuracies, results, labels_array_original,y_original = csv_svc_model_new(labels_original)
+
+        session['y_original']=y_original
 
         accuracy_value = results['Accuracy']
         if isinstance(accuracy_value, list):
@@ -251,7 +264,9 @@ def calculate_random():
             raise ValueError("No label conditions file found.")
 
         print("labels_original", labels_original)
-        accuracies, results, labels_array_original = csv_random_model(labels_original)
+        accuracies, results, labels_array_original,y_original = csv_random_model(labels_original)
+
+        session['y_original']=y_original
 
         accuracy_value = results['Accuracy']
         if isinstance(accuracy_value, list):
@@ -277,7 +292,9 @@ def calculate_logistic():
             raise ValueError("No label conditions file found.")
 
         print("labels_original", labels_original)
-        accuracies, results, labels_array_original = csv_logistic_model(labels_original)
+        accuracies, results, labels_array_original,y_original = csv_logistic_model(labels_original)
+
+        session['y_original']=y_original
 
         accuracy_value = results['Accuracy']
         if isinstance(accuracy_value, list):
@@ -303,7 +320,9 @@ def calculate_knn():
             raise ValueError("No label conditions file found.")
 
         print("labels_original", labels_original)
-        accuracies, results, labels_array_original = csv_knn_model(labels_original)
+        accuracies, results, labels_array_original,y_original = csv_knn_model(labels_original)
+
+        session['y_original']=y_original
 
         accuracy_value = results['Accuracy']
         if isinstance(accuracy_value, list):
@@ -329,7 +348,9 @@ def calculate_cnn():
             raise ValueError("No label conditions file found.")
 
         print("labels_original", labels_original)
-        accuracies, results, labels_array_original = csv_cnn_model(labels_original)
+        accuracies, results, labels_array_original,y_original = csv_cnn_model(labels_original)
+
+        session['y_original']=y_original
 
         accuracy_value = results['Accuracy']
         if isinstance(accuracy_value, list):
@@ -448,9 +469,12 @@ def mat_classification():
 
             # Concatenate the lists to get the desired order
             ordered_preprocessing_steps = ica_filter_steps + other_steps + interpolated_steps
+            session['download_preprocess_steps']=ordered_preprocessing_steps
 
             return jsonify(preprocessing_steps=ordered_preprocessing_steps)
         except Exception as e:
+            print(traceback.format_exc())  # This will print the full traceback to the console
+
             return jsonify({'error': str(e)}), 500
     else:         
         return render_template('mat_files_class.html')
@@ -458,6 +482,7 @@ def mat_classification():
 @bp_file_reader.route('/extract-csp-features', methods=['POST'])
 def extract_csp_features():
     try:
+        session['download_extract_message']=[]
         # Retrieve preprocessed data and other necessary variables from session
         raw_file_path = session.get('preprocessed_raw_file_path')
         if not raw_file_path or not os.path.exists(raw_file_path):
@@ -481,6 +506,8 @@ def extract_csp_features():
 
         # Convert DataFrame to JSON
         features_json = features_df.to_json(orient='records')
+
+        session['download_extract_message']=features_message
         
 
         return jsonify(features=features_json, message=features_message)
@@ -717,27 +744,27 @@ def get_highest_accuracy():
 @bp_file_reader.route('/perform_train_test_mat', methods=['POST'])
 def perform_train_test_mat():
     try:
+        session['mat_model']=[]
+        session['mat_prediction']=[]
         # Parse the JSON request data
         data = request.get_json()
         model_name = data.get('model')
         combined_predictions = []
-        print("moshkela hena")
+        session['mat_model']=model_name
 
         # Retrieve the list of feature CSV paths and subject identifiers from the session
         features_csv_paths = session.get('features_csv_paths')
-        print("moshkela hena 2")
 
 
         for subject_identifier,features_csv_path in features_csv_paths:
-            print("moshkela hena 3")
+            print("subject iden:",subject_identifier)
             features_df = pd.read_csv(features_csv_path)
             labels = session.get('labels')
-            print("moshkela hena 4")
+
             # Call the train_test_split_models function for each subject
-            subject_predictions = train_test_split_models(
+            subject_predictions, subject_metrics = train_test_split_models(
                 subject_identifier, features_df, labels, model_name, test_size=0.2
             )
-            print("moshkela hena 5")
 
             # Function to map label numbers to descriptions
             def map_label_to_description(label):
@@ -756,15 +783,21 @@ def perform_train_test_mat():
                 for prediction in subject_predictions # Adjusted to access 'predictions'
             ]
 
-            # Add the sanitized predictions for the subject to the combined list
-            combined_predictions.extend(sanitized_predictions)
+            # Add the metrics to the combined_predictions dictionary
+            sanitized_predictions_with_metrics = {
+                'predictions': sanitized_predictions,
+                'metrics': subject_metrics
+            }
 
-        # Return the combined results in the response
+            # Add the sanitized predictions and metrics for the subject to the combined list
+            combined_predictions.append(sanitized_predictions_with_metrics)
+
+        session['mat_prediction']=combined_predictions
+        # Modify the return statement to include metrics
         return jsonify({
             'status': 'success',
-            'all_subjects_predictions': combined_predictions,
+            'all_subjects_predictions_with_metrics': combined_predictions,
         })
-
 
     except ValueError as e:
         print(traceback.format_exc())
@@ -845,8 +878,12 @@ def predictions():
 
 @bp_file_reader.route('/predict', methods=['POST'])
 def predict():
+    session['model_name']=[]
+    session['predictions_with_comparison']=[]
+    session['result_predict']=[]
     data = request.get_json()
     model_name = data.get('model')
+    session['model_name']=model_name
     file_path_csv = data.get('filenames', [])
     features_list = []
     print("Processing file paths:", file_path_csv)
@@ -864,24 +901,29 @@ def predict():
     print("Features:", features)
     label_conditions = session.get('label_conditions', {})
     label_messages_svc=session.get('labels_array_original')
+    true_labels_original=session.get('y_original',[])
     print("label conditions", label_conditions)
 
     try:
         
         if model_name == 'svc':
-            predictions = load_and_predict_svc(features, label_conditions)
+            predictions= load_and_predict_svc(features, label_conditions,true_labels_original)
         elif model_name == 'random':
-            predictions = load_and_predict_random(features, label_conditions)
+            predictions= load_and_predict_random(features, label_conditions,true_labels_original)
         elif model_name == 'knn':
-            predictions = load_and_predict_knn(features, label_conditions)
+            predictions = load_and_predict_knn(features, label_conditions,true_labels_original)
         elif model_name == 'cnn':
-            predictions = load_and_predict_cnn(features, label_conditions)
+            predictions = load_and_predict_cnn(features, label_conditions,true_labels_original)
         elif model_name == 'logistic':
-            predictions = load_and_predict_logisitc(features, label_conditions)
+            predictions = load_and_predict_logisitc(features, label_conditions,true_labels_original)
         else:
             return jsonify({'error': 'Invalid model name'}), 400
         
         comparison_results = []
+        result_predict = {'Accuracy': [], 'F1 Score': [], 'Precision': [], 'Recall': [], 'Confusion Matrix':[]}
+        
+     
+
 
         # Define the models you want to iterate over
         models = ['Model_RF', 'Model_SVC', 'Model_LR','Model_KNN','Model_CNN']
@@ -899,6 +941,9 @@ def predict():
                 print("Predictions with comparison:", comparison_results)
                 print("Predictions:", predictions)
 
+                # Calculate the overall accuracy
+                accuracy = comparison_results.count('Right') / len(comparison_results) * 100
+
                 # Prepare the final list for response
                 final_predictions_with_comparison = []
 
@@ -909,8 +954,77 @@ def predict():
 
                 print("Predictions with comparison:", final_predictions_with_comparison)
 
-                # Add the comparison results to the JSON response
-                return jsonify({'predictions_with_comparison': final_predictions_with_comparison})
+                        # Fetch the true labels and the predicted labels
+                true_labels = label_messages_svc  # These should be the original true labels
+                predicted_labels = [pred.split(' = ')[-1] for pred in predictions[model_key]]  # Assuming Model_SVC is being used here
+                
+                # Ensure we only compare lists of the same length
+                min_length = min(len(predicted_labels), len(true_labels))
+                true_labels = true_labels[:min_length]
+                predicted_labels = predicted_labels[:min_length]
+                
+                # Calculate comparison results
+                comparison_results = ['Right' if true_labels[i] == predicted_labels[i] else 'Wrong' for i in range(min_length)]
+
+                # Calculate the overall accuracy
+                accuracy = comparison_results.count('Right') / len(comparison_results) * 100
+
+                # Count occurrences of each class in the true labels
+                true_label_counts = Counter(true_labels)
+
+                # Initialize counts for true positives, false positives, and false negatives
+                tp = Counter()
+                fp = Counter()
+                fn = Counter()
+
+                # Calculate tp, fp, fn for each class
+                for i, label in enumerate(true_labels):
+                    if label == predicted_labels[i]:
+                        tp[label] += 1
+                    else:
+                        fp[predicted_labels[i]] += 1
+                        fn[label] += 1
+                
+                # Calculate precision, recall, and F1 score for each class
+                precision_per_class = {label: tp[label] / (tp[label] + fp[label]) if (tp[label] + fp[label]) > 0 else 0 for label in true_label_counts}
+                recall_per_class = {label: tp[label] / (tp[label] + fn[label]) if (tp[label] + fn[label]) > 0 else 0 for label in true_label_counts}
+                f1_per_class = {label: 2 * (precision_per_class[label] * recall_per_class[label]) / (precision_per_class[label] + recall_per_class[label]) if (precision_per_class[label] + recall_per_class[label]) > 0 else 0 for label in true_label_counts}
+                
+                # Calculate macro-averaged precision, recall, and F1 score
+                macro_precision = sum(precision_per_class.values()) / len(precision_per_class)*100
+                macro_recall = sum(recall_per_class.values()) / len(recall_per_class)*100
+                macro_f1 = sum(f1_per_class.values()) / len(f1_per_class)*100
+
+                # Calculate the confusion matrix
+                labels_unique = sorted(set(true_labels + predicted_labels))  # Sorted list of unique labels
+                conf_matrix = confusion_matrix(true_labels, predicted_labels, labels=labels_unique)
+                
+                # Convert the numpy array to a list of lists for JSON serialization
+                conf_matrix_list = conf_matrix.tolist()
+
+                print(f"Overall accuracy: {accuracy}%")
+                print(f"Overall precision: {macro_precision}%")
+                print(f"Overall recall: {macro_recall}%")
+                print(f"Overall f1 score: {macro_f1}%")
+                print(f"confusion matrix: {conf_matrix}")
+
+
+
+        result_predict['Accuracy'].append(accuracy)
+        result_predict['Precision'].append(macro_precision)        
+        result_predict['Recall'].append(macro_recall)
+        result_predict['F1 Score'].append(macro_f1)
+        result_predict['Confusion Matrix'].append(conf_matrix_list)
+
+        session['predictions_with_comparison']=final_predictions_with_comparison
+        session['result_predict']=result_predict
+
+
+        # Add the comparison results to the JSON response
+        return jsonify({
+            'predictions_with_comparison': final_predictions_with_comparison,
+            'result_predict': result_predict
+        })
                 
     except Exception as e:
         print(traceback.format_exc())
@@ -919,27 +1033,46 @@ def predict():
 
 
 
+def numpy_to_list(data):
+    if isinstance(data, np.ndarray):
+        return data.tolist()
+    elif isinstance(data, dict):
+        return {key: numpy_to_list(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [numpy_to_list(item) for item in data]
+    else:
+        return data
 
 @bp_file_reader.route('/perform_predict_on_training_data', methods=['POST'])
 def perform_predict_on_training_data():
+    session['model_name']=[]
+    session['predictions_with_comparison']=[]
+    session['download_performance']=[]
+    session['result_predict']=[]
     data = request.get_json()
     model_name = data.get('model')
+    session['model_name']=model_name
 
     try:
-        # Assuming you have a function that handles the training and prediction on training data
         label_conditions = session.get('label_conditions_in_predict_train', {})
-        print("label condition in predict train:",label_conditions)
+        print("label condition in predict train:", label_conditions)
         formatted_predictions_train, result_predict_train = predict_on_training_data(model_name, label_conditions)
+
+        # Convert all numpy arrays in the results to lists
+        result_predict_train = numpy_to_list(result_predict_train)
+        session['predictions_with_comparison']=formatted_predictions_train
+        session['result_predict']=result_predict_train
+        session['download_performance']=result_predict_train
+
         return jsonify({
             'status': 'success',
             'formatted_predictions_train': formatted_predictions_train,
             'result_predict_train': result_predict_train
-            })
-    
-        
+        })
+
     except Exception as e:
         print(traceback.format_exc())
-        return jsonify({'status': 'error', 'details': str(e)}), 500     
+        return jsonify({'status': 'error', 'details': str(e)}), 500
     
 @bp_file_reader.route('/mat_predict', methods=['GET', 'POST'])
 def mat_predict():
@@ -1128,15 +1261,21 @@ def extract_csp_features_predict():
 @bp_file_reader.route('/perform_mat_prediction', methods=['POST'])
 def perform_mat_prediction():
     try:
+        session['mat_model']=[]
+        session['mat_prediction']=[]
+        session['download_performance']=[]
         data = request.get_json()
         mat_predict_file_paths = session.get('mat_predict_file_paths', [])
         model_name = data.get('model_name') 
+        session['mat_model']=model_name
         print(f"Model name from session: {model_name}")  # Debugging print
 
         label_messages=session.get('labels_message')
         print("labels message in predict:",label_messages)
 
         all_subjects_predictions = []  # List to store predictions for all subjects
+        all_subjects_metrics = {}  # Dictionary to store metrics for all subjects
+
 
         # Define a dictionary to map model names to prediction functions
         prediction_functions = {
@@ -1165,16 +1304,162 @@ def perform_mat_prediction():
             features_message, features_df = extract_features_csp(preprocessed_raw_predict, sfreq, labels)
             
             # Call the appropriate predict function
-            subject_predictions = predict_function(features_df, subject_identifier)
+            subject_predictions, subject_metrics = predict_function(features_df, subject_identifier)
             all_subjects_predictions.extend(subject_predictions)  # Add the result to the list
+            all_subjects_metrics[subject_identifier] = subject_metrics  # Add metrics to the dictionary
 
         # Store the accuracy messages in the session or pass to the template
         session['predict_message'] = all_subjects_predictions
         #session.pop('mat_predict_file_paths', None)  # Clear the file paths to prevent reprocessing
+        session['mat_prediction']=all_subjects_predictions
 
-        return jsonify(predict=all_subjects_predictions, label_messages=session.get('labels_message'))
+        session['download_performance']=all_subjects_metrics
+
+        return jsonify(predict=all_subjects_predictions, label_messages=session.get('labels_message'), metrics=all_subjects_metrics)
     except Exception as e:
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
     
- 
+
+def add_footer(canvas, doc):
+    canvas.saveState()
+    footer_text = "EEG Hub Analysis - Confidential Report"
+    canvas.setFont("Helvetica", 9)
+    canvas.drawString(40, 30, footer_text)
+    canvas.restoreState()
+    
+
+@bp_file_reader.route('/download_predictions', methods=['GET'])
+def download_predictions():
+    try:
+        predictions_with_comparison = session.get('predictions_with_comparison', [])
+        result_predict = session.get('result_predict', {})
+        selected_model = session.get('model_name')
+        
+        pdf_buffer = io.BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
+        elements = []
+        
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('title_style',
+                                     parent=styles['Title'],
+                                     fontName='Helvetica-Bold',
+                                     fontSize=18,
+                                     spaceAfter=12,
+                                     textColor=black)
+        heading_style = ParagraphStyle('heading_style',
+                                       parent=styles['Heading2'],
+                                       fontName='Helvetica-Bold',
+                                       fontSize=14,
+                                       spaceAfter=6,
+                                       textColor=black)
+        body_style = ParagraphStyle('body_style',
+                                    parent=styles['BodyText'],
+                                    fontName='Helvetica',
+                                    fontSize=12,
+                                    leading=15,
+                                    textColor=black)
+
+        # Title
+        elements.append(Paragraph("EEG Classification Report", title_style))
+
+        # Subtitle and Introduction
+        intro_text = f"<b>Report generated by:</b> EEG Hub Analysis System<br/>"\
+                     f"<b>Classification model used:</b> <font color='blue'>{selected_model}</font><br/><br/>"\
+                     "This document provides a detailed overview of the EEG classification results, "\
+                     "including predictions, comparisons against actual data, and key performance metrics."
+        elements.append(Paragraph(intro_text, body_style))
+
+        # Methodology Section
+        methodology_text = "The classification was performed using a machine learning model that was "\
+                           f"{selected_model}, trained and validated on a comprehensive dataset of EEG readings."
+        elements.append(Paragraph("<b>Methodology:</b>", heading_style))
+        elements.append(Paragraph(methodology_text, body_style))
+
+        # Predictions
+        elements.append(Paragraph("<b>Predictions:</b>", heading_style))
+        for pred in predictions_with_comparison:
+            elements.append(Paragraph(pred, body_style))
+
+        # Metrics Section
+        elements.append(Paragraph("<b>Performance Metrics:</b>", heading_style))
+        for k, v in result_predict.items():
+            metric_text = f"<b>{k}:</b> {v}"
+            elements.append(Paragraph(metric_text, body_style))
+
+        # Build PDF
+        doc.build(elements, onFirstPage=add_footer, onLaterPages=add_footer)
+
+        # Move to the beginning of the BytesIO buffer
+        pdf_buffer.seek(0)
+        return send_file(pdf_buffer, as_attachment=True, download_name="EEG_Classification_Report.pdf", mimetype='application/pdf')
+
+    except Exception as e:
+        print(traceback.format_exc())  # This will print the full traceback to the console
+        return jsonify({'error': str(e)}), 500
+    
+
+@bp_file_reader.route('/download_predictions_mat', methods=['GET'])
+def download_predictions_mat():
+    try:
+        preprocess_steps = session.get('download_preprocess_steps', [])
+        extract_messages = session.get('download_extract_message', [])
+        model = session.get('mat_model')
+        predictions = session.get('mat_prediction', [])
+        performance_metrics = session.get('download_performance', {})
+        
+        pdf_buffer = io.BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
+        elements = []
+        
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('title_style', parent=styles['Title'], fontName='Helvetica-Bold', fontSize=18, spaceAfter=12, textColor=black)
+        heading_style = ParagraphStyle('heading_style', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=14, spaceAfter=6, textColor=black)
+        body_style = ParagraphStyle('body_style', parent=styles['BodyText'], fontName='Helvetica', fontSize=12, leading=15, textColor=black)
+
+        # Title
+        elements.append(Paragraph("EEG Classification Report for MAT Files", title_style))
+
+        # Subtitle and Introduction
+        intro_text = f"<b>Report generated by:</b> EEG Hub Analysis System<br/>"\
+                     f"<b>Classification model used:</b> <font color='blue'>{model}</font><br/>"\
+                     "This document provides a detailed overview of the EEG classification process, "\
+                     "including data preprocessing, feature extraction, predictions, and performance metrics."
+        elements.append(Paragraph(intro_text, body_style))
+        elements.append(Spacer(1, 12))
+
+        # Preprocessing Steps
+        elements.append(Paragraph("<b>Preprocessing Steps:</b>", heading_style))
+        for step in preprocess_steps:
+            elements.append(Paragraph(step, body_style))
+
+        # Feature Extraction Steps
+        elements.append(Paragraph("<b>Feature Extraction Steps:</b>", heading_style))
+        for message in extract_messages:
+            elements.append(Paragraph(message, body_style))
+
+        # Predictions
+        elements.append(Paragraph("<b>Predictions:</b>", heading_style))
+        for prediction in predictions:
+            if isinstance(prediction, dict):
+                prediction_text = '<br/>'.join([f"{k}: {v}" for k, v in prediction.items()])
+            else:
+                prediction_text = str(prediction)
+            elements.append(Paragraph(prediction_text, body_style))
+
+        # Performance Metrics
+        elements.append(Paragraph("<b>Performance Metrics:</b>", heading_style))
+        for key, value in performance_metrics.items():
+            metric_text = f"<b>{key}:</b> {value}"
+            elements.append(Paragraph(metric_text, body_style))
+
+        # Build PDF
+        doc.build(elements, onFirstPage=add_footer, onLaterPages=add_footer)
+
+        # Move to the beginning of the BytesIO buffer
+        pdf_buffer.seek(0)
+        return send_file(pdf_buffer, as_attachment=True, download_name="EEG_Classification_Report.pdf", mimetype='application/pdf')
+
+    except Exception as e:
+        print(traceback.format_exc())  # This will print the full traceback to the console
+        return jsonify({'error': str(e)}), 500    

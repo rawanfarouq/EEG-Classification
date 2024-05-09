@@ -520,7 +520,6 @@ function displayAccuracies(accuracies, modelName) {
     let modelPanel = document.getElementById(modelPanelId);
     const keysOrder = ['Model', 'Accuracy', 'Precision', 'Recall', 'F1 Score'];
 
-
     if (!modelPanel) {
         // If the model panel does not exist, create it
         modelPanel = document.createElement('div');
@@ -533,16 +532,6 @@ function displayAccuracies(accuracies, modelName) {
 
         let listGroup = document.createElement('ul');
         listGroup.className = 'list-group list-group-flush';
-        
-        keysOrder.forEach(key => {
-            if (accuracies.hasOwnProperty(key)) { // Check if the key exists in the accuracy object
-                let listItem = document.createElement('li');
-                listItem.className = 'list-group-item';
-                listItem.textContent = `${key}: ${accuracies[key]}`;
-                listGroup.appendChild(listItem);
-            }
-        });
-
         modelPanel.appendChild(listGroup);
 
         let predictButton = document.createElement('button');
@@ -550,7 +539,6 @@ function displayAccuracies(accuracies, modelName) {
         predictButton.textContent = 'Predict';
         predictButton.onclick = function() {
             sessionStorage.setItem('selectedModel', modelName);
-            console.log("csv model:",modelName)
             window.location.href = '/predictions';
         };
         modelPanel.appendChild(predictButton);
@@ -559,7 +547,7 @@ function displayAccuracies(accuracies, modelName) {
         toggleButton.className = 'btn btn-secondary ml-2';
         toggleButton.textContent = 'Hide';
         toggleButton.onclick = function() {
-            let list = modelPanel.querySelector('.list-group'); // Define 'list' here
+            let list = modelPanel.querySelector('.list-group');
             $(list).toggle();
             toggleButton.textContent = $(list).is(':visible') ? 'Hide' : 'View ' + modelName;
         };
@@ -567,9 +555,24 @@ function displayAccuracies(accuracies, modelName) {
 
         accuraciesContainer.appendChild(modelPanel);
     } else {
-        // If the model panel already exists, show it without fetching new data
-        $(`#${modelPanelId}`).show();
+        // If the model panel exists, clear the existing list items before adding new ones
+        let listGroup = modelPanel.querySelector('.list-group');
+        listGroup.innerHTML = '';  // Clear existing list items
     }
+
+    // Add new list items to the list group
+    let listGroup = modelPanel.querySelector('.list-group');
+    keysOrder.forEach(key => {
+        if (accuracies.hasOwnProperty(key)) { // Check if the key exists in the accuracy object
+            let listItem = document.createElement('li');
+            listItem.className = 'list-group-item';
+            listItem.textContent = `${key}: ${accuracies[key]}`;
+            listGroup.appendChild(listItem);
+        }
+    });
+
+    // Ensure the model panel is visible if it was previously hidden
+    $(modelPanel).show();
 }
 
 // Event listeners for dropdown items

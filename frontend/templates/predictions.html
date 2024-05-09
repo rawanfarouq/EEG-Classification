@@ -480,20 +480,51 @@ document.getElementById('predictOnTrainingData').addEventListener('click', funct
     }
     predictionsCol.appendChild(listGroup);
 
-    // Check and display metrics if available
-    if (data.result_predict_train) {
+      // Metrics display
+      if (data.result_predict_train) {
         var metricsList = document.createElement('ul');
         metricsList.className = 'list-group list-group-flush';
-        var metrics = ['Accuracy', 'Precision', 'Recall', 'F1 Score'];
+        var metrics = ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'Confusion Matrix'];
         metrics.forEach(function(metric) {
             var metricItem = document.createElement('li');
             metricItem.className = 'list-group-item';
-            metricItem.textContent = `${metric}: ${data.result_predict_train[metric][0]}%`;
+            if (metric === 'Confusion Matrix') {
+                var matrix = data.result_predict_train[metric];
+                if (matrix && matrix.length > 0) {
+                    metricItem.textContent = `${metric}:`;
+                    var table = document.createElement('table');
+                    table.className = 'table table-bordered table-hover table-responsive text-center';
+
+                    // Create header row
+                    var thead = document.createElement('thead');
+                    var headerRow = document.createElement('tr');
+                    headerRow.innerHTML = '<th>Actual \\ Predicted</th>';
+                    matrix[0].forEach((_, index) => {
+                        headerRow.innerHTML += `<th>Class ${index}</th>`;
+                    });
+                    thead.appendChild(headerRow);
+                    table.appendChild(thead);
+
+                    // Create body rows
+                    var tbody = document.createElement('tbody');
+                    matrix.forEach((row, index) => {
+                        var tr = document.createElement('tr');
+                        tr.innerHTML = `<td>Class ${index}</td>`;  // Label for actual class
+                        row.forEach(cell => {
+                            tr.innerHTML += `<td>${cell}</td>`;  // Cell value for predicted class
+                        });
+                        tbody.appendChild(tr);
+                    });
+                    table.appendChild(tbody);
+                    metricItem.appendChild(table);
+                }
+            } else {
+                metricItem.textContent = `${metric}: ${data.result_predict_train[metric][0]}%`;
+            }
             metricsList.appendChild(metricItem);
         });
         metricsCol.appendChild(metricsList);
     }
-
     // Append columns to row
     row.appendChild(predictionsCol);
     row.appendChild(metricsCol);
@@ -531,6 +562,14 @@ document.getElementById('predictOnTrainingData').addEventListener('click', funct
 
     // Display the predictionResults container
     document.getElementById('predictionResults').style.display = 'block';
+    var downloadButton = document.createElement('button');
+    downloadButton.textContent = 'Download Result';
+    downloadButton.className = 'btn btn-success mt-3';
+    downloadButton.addEventListener('click', function() {
+        // Assuming you have a URL to the file you want to download
+        window.location.href = '/download_predictions'; // Modify this URL to your actual download URL
+    });
+    predictionsDisplay.appendChild(downloadButton);
 }
 
 
@@ -570,7 +609,7 @@ document.getElementById('predictOnTrainingData').addEventListener('click', funct
             })
             .then(data => {
             if (data.status === 'success' && data.file_path_csv) {
-                spinner.classList.add('d-none');
+                
                 return fetch('/predict', {
                     method: 'POST',
                     headers: {
@@ -592,10 +631,11 @@ document.getElementById('predictOnTrainingData').addEventListener('click', funct
                 return response.json();
             })
             .then(data => {
-                
-                if (data.predictions_with_comparison) {
+                if (data.predictions_with_comparison && data.result_predict) {
+                    spinner.classList.add('d-none');
                     console.log('Predictions with Comparison:', data.predictions_with_comparison);
-                    displayPredictions(data.predictions_with_comparison);
+                    console.log('Prediction Results:', data.result_predict);
+                    displayPredictions(data.predictions_with_comparison, data.result_predict); // Pass result_predict as an argument
                     removeFileUploader();
                 } else {
                     throw new Error('Failed to get predictions or comparison results');
@@ -620,7 +660,7 @@ function displayError(error) {
     }
 }
 
-function displayPredictions(predictionsWithComparison) {
+function displayPredictions(predictionsWithComparison, resultPredict) {
     
     var predictionsDisplay = document.getElementById('predictionsDisplay');
     predictionsDisplay.innerHTML = ''; // Clear previous predictions
@@ -629,6 +669,65 @@ function displayPredictions(predictionsWithComparison) {
 
     var predictionList = document.createElement('ul');
     predictionList.className = 'list-group list-group-flush';
+
+     // Display result_predict results
+    var resultsCard = document.createElement('div');
+    resultsCard.className = 'card mt-3 animate__animated animate__fadeIn';
+
+    var resultList = document.createElement('ul');
+    resultList.className = 'list-group list-group-flush';
+
+     // Dynamically populate the results list
+     Object.entries(resultPredict).forEach(([key, value]) => {
+        var listItem = document.createElement('li');
+        listItem.className = 'list-group-item';
+        if (key === 'Confusion Matrix' && Array.isArray(value)) {
+            listItem.textContent = 'Confusion Matrix:';
+            var table = document.createElement('table');
+            table.className = 'table table-sm table-bordered';
+
+            // Create the header row
+            var thead = document.createElement('thead');
+            var headerRow = document.createElement('tr');
+            var th = document.createElement('th');
+            th.textContent = 'Actual \\ Predicted';
+            headerRow.appendChild(th);
+            ['Class 0', 'Class 1'].forEach(text => {
+                var th = document.createElement('th');
+                th.textContent = text;
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            // Create the body rows
+            var tbody = document.createElement('tbody');
+            if (Array.isArray(value)) {
+                value.forEach((row, index) => {
+                    var tr = document.createElement('tr');
+                    var td = document.createElement('td');
+                    td.textContent = 'Class ' + index;
+                    tr.appendChild(td);
+                    if (Array.isArray(row)) {
+                        row.forEach(cell => {
+                            var td = document.createElement('td');
+                            td.textContent = cell;
+                            tr.appendChild(td);
+                        });
+                    }
+                    tbody.appendChild(tr);
+                });
+            }
+            table.appendChild(tbody);
+            listItem.appendChild(table);
+        } else {
+            listItem.textContent = `${key}: ${value}`;
+        }
+        resultList.appendChild(listItem);
+    });
+
+    resultsCard.appendChild(resultList);
+    predictionsDisplay.appendChild(resultsCard);
 
     if (Array.isArray(predictionsWithComparison)) {
         predictionsWithComparison.forEach(function(predictionWithComparison) {
@@ -677,7 +776,17 @@ function displayPredictions(predictionsWithComparison) {
         predictionsDisplay.appendChild(errorMessage);
     }
 
+
     document.getElementById('predictionResults').style.display = 'block';
+    var downloadButton = document.createElement('button');
+    downloadButton.textContent = 'Download Result';
+    downloadButton.className = 'btn btn-success mt-3';
+    downloadButton.addEventListener('click', function() {
+        // Assuming you have a URL to the file you want to download
+        window.location.href = '/download_predictions'; // Modify this URL to your actual download URL
+    });
+    predictionsDisplay.appendChild(downloadButton);
+
 }
 
 

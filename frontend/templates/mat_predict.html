@@ -6,20 +6,55 @@
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mat Predict</title>
+
+    <!-- Favicon -->
+    <link href="/static/img/favicon.ico" rel="icon">
+
+    <!-- Google Web Fonts -->
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Jost:wght@500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet"> 
+ 
+    <!-- Icon Font Stylesheet -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.4.1/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Libraries Stylesheet -->
+    <link href="/static/lib/owlcarousel/assets/owl.carousel.min.css" rel="stylesheet">
+    <link href="/static/lib/animate/animate.min.css" rel="stylesheet">
+    <link href="/static/lib/tempusdominus/css/tempusdominus-bootstrap-4.min.css" rel="stylesheet" />
+    <link href="/static/lib/twentytwenty/twentytwenty.css" rel="stylesheet" />
+
+    <!-- Customized Bootstrap Stylesheet -->
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Template Stylesheet -->
+    <link href="/static/css/style.css" rel="stylesheet">
+
+    <title>EEG Hub - EEG Analysis Website</title>
     <style>
+        html, body {
+            height: 110%;
+            margin: 0;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f0f0f0;
-            height: 100vh;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            justify-content: center;
+        }
+
+        .content-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%; /* Adjust as per your layout requirements */
         }
         .container {
-            max-width: 400px;
-            margin-bottom: 30px;
+            width: 50%;
+            background-color: #fff;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            margin-top: 20px;
         }
         .alert {
             margin-top: 20px;
@@ -40,42 +75,266 @@
             color: #333;
             margin-bottom: 20px;
         }
+        .footer-container {
+            width: 100%;
+        }
+        .message-box {
+            background: #f8f9fa; /* A light grey background */
+            border-left: 4px solid #007bff; /* A blue left border */
+            color: #333; /* Dark text color for readability */
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* A subtle shadow for depth */
+            animation: fadeIn 1s ease-in-out; /* Animation for the message box */
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Styling for bold and emphasized text, if needed */
+        .message-box strong { 
+            font-weight: bold; /* Makes the text bold */
+        }
+
+        .message-box em { 
+            font-style: italic; /* Makes the text italic */
+            text-decoration: underline; /* Underlines the text */
+        }
+        #preprocessingStepsContainer,
+            #featuresMessage {
+                background: #f8f9fa; /* A light grey background */
+                padding: 25px;
+                border-radius: 5px;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* A subtle shadow for depth */
+                border-left: 4px solid #007bff; /* A blue left border */
+                margin-bottom: 20px; /* Spacing below the container */
+                display: none; /* Initially hidden */
+                animation: slideIn 1.0s ease-out; /* Animation for the message box */
+            }
+        .message-box.text-info {
+            background: #d1ecf1; /* A light blue background */
+            color: #212526; /* A color that contrasts well with the light blue background */
+            border-left: 4px solid #17a2b8; /* A blue left border for informational messages */
+        }
+
+        .message-box.text-danger {
+            background: #f8d7da; /* A light red background */
+            color: #721c24; /* A color that contrasts well with the light red background */
+            border-left: 4px solid #dc3545; /* A red left border for error messages */
+        }
+        .border-left {
+            border-left: 4px solid #007bff; /* A blue left border */
+        }
+        .correct-icon {
+            color: green;
+        }
+
+        .wrong-icon {
+            color: red;
+        }
+        
        
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="upload-form">
-            <h1 id="workflowTitle">EEG Data Prediction Workflow</h1>
-            <p class="instructions" id="workflowInstructions">Upload your raw EEG data files and click "Preprocess" to start the prediction workflow.</p>
+
+    <div class="content-wrapper">
+
+
+    <!-- Topbar Start -->
+    <div class="container-fluid bg-light ps-5 pe-0 d-none d-lg-block">
+        <div class="row gx-0">
+            <div class="col-md-6 text-center text-lg-start mb-2 mb-lg-0">
+                <div class="d-inline-flex align-items-center">
+                    <small class="py-2"><i class="far fa-clock text-primary me-2"></i>Opening Hours: Mon - Tues : 6.00 am - 10.00 pm, Sunday Closed </small>
+                </div>
+            </div>
+            <div class="col-md-6 text-center text-lg-end">
+                <div class="position-relative d-inline-flex align-items-center bg-primary text-white top-shape px-5">
+                    <div class="me-3 pe-3 border-end py-2">
+                        <p class="m-0"><i class="fa fa-envelope-open me-2"></i>info@eeghub.com</p>
+                    </div>
+                    <div class="py-2">
+                        <p class="m-0"><i class="fa fa-phone-alt me-2"></i>+012 345 6789</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Topbar End -->
+
+
+     <!-- Navbar Start -->
+     <nav class="navbar navbar-expand-lg bg-white navbar-light shadow-sm px-5 py-3 py-lg-0" style="width: 100%;">
+        <a href="index.html" class="navbar-brand p-0">
+            <h1 class="m-0 text-primary"><i class="fa fa-tooth me-2"></i>EEG Hub</h1>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarCollapse">
+            <div class="navbar-nav ms-auto py-0">
+                <a href="index" class="nav-item nav-link">Home</a>
+                <a href="about" class="nav-item nav-link">About</a>
+                <a href="service" class="nav-item nav-link active">Service</a>
+                <a href="contact" class="nav-item nav-link">Contact</a>
+            </div>
+            <button type="button" class="btn text-dark" data-bs-toggle="modal" data-bs-target="#searchModal"><i class="fa fa-search"></i></button>
+            <a href="appointment" class="btn btn-primary py-2 px-4 ms-3">Upload Your EEG Data</a>
+        </div>
+    </nav>
+    <!-- Navbar End -->
+
+
+        <h1 class="text-center mb-4" id="workflowTitle" style="margin-top: 20px;">EEG Data Prediction Workflow</h1>
+    
+         <!-- Data Upload Options -->
+        <div class="row justify-content-center mb-4" style="margin-left: auto;margin-right: auto;">
+            <div class="col-md-8">
+                <p>Choose one of the following options to proceed:</p>
+                <div class="btn-group" role="group" aria-label="Prediction Options">
+                    <button type="button" class="btn btn-outline-primary" id="optionNewDataset">Option 1: Predict with a new dataset</button>
+                    <button type="button" class="btn btn-outline-secondary" id="predictOnTrainingData">Option 2: Predict on the training dataset</button>
+                     
+                </div>
+            </div>
+    </div>
+    <!-- New Dataset Form Section -->
+    <div class="row justify-content-center mb-4" style="width:60% ; margin-left: auto;margin-right: 152px;">
+        <div class="col-md-8">
+        <div id="newDatasetForm" style="display: none; margin-top: 2rem;">
             <form id="uploadForm" action="/mat_predict" method="POST" enctype="multipart/form-data">
-                <div class="form-group">
-                    <label for="file_path_upload">Upload your EEG file or folder:</label>
+                <div class="form-group" >
+                    <label for="file_path_upload" >Upload your EEG file or folder:</label>
                     <input type="file" class="form-control-file" id="file_path_upload" name="file_path_upload" webkitdirectory directory multiple required>
                 </div>
-                <button type="submit" class="btn btn-success btn-block">Upload</button>
-                <button type="button" id="predictTrainingButton" class="btn btn-primary btn-block mt-2">Predict on Training Data</button>
-
+                <!-- Spinner element (hidden by default) -->
+                <div id="loadingSpinner" class="text-center d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-success btn-block" style="width: 50%;">Upload</button>
             </form>
         </div>
-        <div id="alertBox"></div>
-        <div id="preprocessingStepsContainer" class="preprocessing-steps" style="display:none;">
-            <h2>Preprocessing Steps:</h2>
-            <ul id="preprocessingStepsList"></ul>
         </div>
-        <button id="extractFeaturesButton" class="btn btn-primary mt-3" style="display:none;">Extract Features</button>
-        <div id="featuresMessage" class="mt-3"></div>
+    </div>
+    
+     <!-- Training Data Form Section -->
+     <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div id="trainingDataForm" style="display: none;">
+                <!-- Include any form or content for predicting on training data here -->
+                <button type="button" id="predictTrainingButton" class="btn btn-primary btn-block" style="width: 30%; margin-left: 20rem;">Predict on Training Data</button>
+                <!-- Spinner element (hidden by default) -->
+                <div id="loadingSpinner4" class="text-center d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>    
+     </div>
+
+        <!-- Message and Alert Section -->
+        <div class="row justify-content-center mb-4" style="width:60% ; margin-left: auto;margin-right: auto; ">
+            <div class="col-md-8">
+            <div id="alertBox" class="mt-3"></div>
+            
+
+
+             
+            <div id="preprocessingStepsContainer" class="preprocessing-steps" style="display:none;">
+                <h2>Preprocessing Steps:</h2>
+                <ul id="preprocessingStepsList"></ul>
+            </div>
+
+            <button id="extractFeaturesButton" class="btn btn-primary mt-3" style="display:none;">Extract Features</button>
+            <!-- Spinner element (hidden by default) -->
+            <div id="loadingSpinner2" class="text-center d-none">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        <div id="featuresMessage" class="preprocessing-steps"></div>
         <button id="predictButton" class="btn btn-primary mt-3" style="display:none;">Prediction</button>
-        
+        <!-- Spinner element (hidden by default) -->
+        <div id="loadingSpinner3" class="text-center d-none">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    
         <div id="predictionMessage" class="mt-3"></div>
+
+        </div>
+        <div id="predictionMessage_train" class="mt-3"></div>
+
+    </div>    
         
+
+    
 
     </div>
 
-    
+    <div class="footer-container">
+        <div class="container-fluid text-light py-4" style="background: #051225; ">
+            <div class="container1">
+                <div class="row g-0">
+                    <div class="col-md-6 text-center text-md-start">
+                        <p class="mb-md-0">&copy; <a class="text-white border-bottom" href="#">EEG Hub 2024</a>. All Rights Reserved.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
 
    <script>
+document.getElementById('optionNewDataset').addEventListener('click', function() {
+    console.log('Option 1 clicked. Attempting to display newDatasetForm.');
+   
+
+    // Retrieve the new dataset upload form element
+    var newDatasetFormDiv = document.getElementById('newDatasetForm');
+    document.getElementById('uploadForm').style.display = 'block';
+    console.log('Computed display property:', getComputedStyle(newDatasetFormDiv).display);
     
+    // Show the newDatasetForm div if it's found
+    if (newDatasetFormDiv) {
+        newDatasetFormDiv.style.display = 'block';
+        // Log the current display property after setting it
+        console.log('newDatasetForm display property after setting:', newDatasetFormDiv.style.display);
+    } else {
+        // Log an error message if the element is not found
+        console.error('newDatasetForm element not found!');
+    }
+
+    // Hide all other elements
+    document.getElementById('trainingDataForm').style.display = 'none';
+    document.getElementById('alertBox').style.display = 'none';
+    document.getElementById('featuresMessage').style.display = 'none';
+    document.getElementById('preprocessingStepsContainer').style.display = 'none';
+    document.getElementById('extractFeaturesButton').style.display = 'none';
+    document.getElementById('predictButton').style.display = 'none';
+    document.getElementById('predictionMessage').style.display = 'none';
+    document.getElementById('predictionMessage_train').style.display = 'none';
+});
+
+document.getElementById('predictOnTrainingData').addEventListener('click', function() {
+    // Show the training data form
+    document.getElementById('trainingDataForm').style.display = 'block';
+    
+    // Hide the new dataset upload form and other elements
+    document.getElementById('newDatasetForm').style.display = 'none';
+    document.getElementById('alertBox').style.display = 'none'; // Ensure the alert box is hidden here too
+    document.getElementById('featuresMessage').style.display = 'none';
+    document.getElementById('preprocessingStepsContainer').style.display = 'none';
+    document.getElementById('extractFeaturesButton').style.display = 'none';
+    document.getElementById('predictButton').style.display = 'none';
+    document.getElementById('predictionMessage').style.display = 'none';
+    document.getElementById('predictionMessage_train').style.display = 'none';
+});
+
+
     var preprocessButtonClicked = false; // Flag to track button state
     var preprocessingStepsFetched = false; // Flag to track whether preprocessing steps are fetched
     var extractFeaturesFetched = false; // Flag to track whether features are fetched
@@ -90,18 +349,24 @@
     }
 });
 
+
+
 document.getElementById('predictTrainingButton').addEventListener('click', function() {
+    let spinner = document.getElementById('loadingSpinner4');
     var selectedModelName = sessionStorage.getItem('selectedModelName');
     if (!selectedModelName) {
-        document.getElementById('predictionMessage').innerHTML = `<div class="alert alert-danger" role="alert">No model selected.</div>`;
+        document.getElementById('predictionMessage_train').innerHTML = `<div class="alert alert-danger" role="alert">No model selected.</div>`;
         return;
     }
+    // Show spinner
+    spinner.classList.remove('d-none');
     fetch('/perform_train_test_mat', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ model: selectedModelName }) // Corrected the key to 'model' instead of 'model_name'
     }).then(response => {
         if (!response.ok) {
+            spinner.classList.add('d-none');
             throw new Error('Network response was not ok ' + response.statusText);
         }
         return response.json(); // Only call .json() once
@@ -110,23 +375,69 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
 
     // Check if the server operation was successful
     if (data.status === 'success') {
+        spinner.classList.add('d-none');
         console.log("data is good");
-        // Assuming 'all_subjects_predictions' contains an array of prediction results
-        if (data.all_subjects_predictions && data.all_subjects_predictions.length > 0) {
-            let predictionsBySubject = {};
-            data.all_subjects_predictions.forEach(prediction => {
-                let subject = prediction.subject_identifier.split('_')[0];  // e.g., 'sub-005'
-                let session = prediction.subject_identifier.split('_')[1];  // e.g., 'ses-03'
 
+        var goBackButton = document.createElement('button');
+                goBackButton.textContent = 'Go back to select another model';
+                goBackButton.className = 'btn btn-outline-dark'; // Use Bootstrap classes
+                goBackButton.style.marginTop = '20px';
+                goBackButton.style.marginRight = '10px'
+                goBackButton.style.cursor = 'pointer';
+                goBackButton.addEventListener('click', function() {
+                // Set a flag in session storage indicating that the loading process has started
+                sessionStorage.setItem('loadingStatus', 'started');
+                sessionStorage.setItem('loadingMessage', 'Loading, please wait...');
+                document.getElementById('predictOnTrainingData').innerHTML = "<p>Loading, please wait...</p>";
+                // Redirect to the CSV page
+                window.location.href = '/mat_classification';
+
+                // Make the asynchronous call to the csv_features function
+                fetch('{{ url_for("file_reader.mat_classification") }}', {
+            method: 'POST',
+        })
+            
+                }); 
+                var downloadButton = document.createElement('button');
+                    downloadButton.textContent = 'Download Result';
+                    downloadButton.className = 'btn btn-outline-primary';
+                    downloadButton.style.marginTop = '20px';
+                    downloadButton.style.cursor = 'pointer';
+                    downloadButton.addEventListener('click', function() {
+                        window.location.href = '/download_predictions_mat'; // Modify this URL to your actual download URL
+                    });
+
+
+                var predictionMessageContainer = document.getElementById('predictionMessage_train');
+                predictionMessageContainer.innerHTML = ''; // Clear any existing content
+                predictionMessageContainer.appendChild(goBackButton); // Append the button to the container
+                predictionMessageContainer.appendChild(downloadButton); // Append the button to the container
+
+
+               
+        
+        // Assuming 'all_subjects_predictions' contains an array of prediction results
+        if (data.all_subjects_predictions_with_metrics && data.all_subjects_predictions_with_metrics.length > 0) {
+            let predictionsBySubject = {};
+            data.all_subjects_predictions_with_metrics.forEach(subjectData => {
+                let subject = subjectData.predictions[0].subject_identifier.split('_')[0]; // e.g., 'sub-005'
+                let session = subjectData.predictions[0].subject_identifier.split('_')[1]; // e.g., 'ses-03'
+                let metrics = subjectData.metrics;
                 if (!predictionsBySubject[subject]) {
                     predictionsBySubject[subject] = {};
                 }
 
                 if (!predictionsBySubject[subject][session]) {
-                    predictionsBySubject[subject][session] = [];
+                    predictionsBySubject[subject][session] = {
+                        predictions: [],
+                        metrics: metrics
+                    };
                 }
 
-                predictionsBySubject[subject][session].push(prediction);
+                // Now push each prediction from subjectData.predictions
+                subjectData.predictions.forEach(prediction => {
+                    predictionsBySubject[subject][session].predictions.push(prediction);
+                });
             });
 
             let resultsContent = '';
@@ -140,11 +451,73 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                     let isActive = index === 0 ? 'active' : '';
                     tabsContent += `<li class="nav-item"><a class="nav-link ${isActive}" id="tab-${subject}-${session}" data-toggle="tab" href="#pane-${subject}-${session}" role="tab">${session}</a></li>`;
                     
-                    let sessionPredictionsList = predictionsBySubject[subject][session].map((pred, predIndex) => {
-                        return `<div>${predIndex + 1}. Actual: ${pred.actual_label}<br> - Predicted: ${pred.predicted_label} (${pred.correctness})</div>`;
-                    }).join('');
+                    let sessionPredictions = predictionsBySubject[subject][session].predictions;
+                    let sessionMetrics = predictionsBySubject[subject][session].metrics;
 
-                    tabPanesContent += `<div class="tab-pane ${isActive}" id="pane-${subject}-${session}" role="tabpanel">${sessionPredictionsList}</div>`;
+                    
+                // Create a table for the predictions list
+                let sessionPredictionsTable = `
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Actual</th>
+                                <th>Predicted</th>
+                                <th>Correctness</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+
+                 
+            
+
+                // Fill the table with prediction data
+                sessionPredictions.forEach((pred, predIndex) => {
+                    // Determine the icon to use based on correctness
+                 let correctnessIcon = pred.correctness === 'Correct' ?
+                        `<span class="correct-icon">&#10004;</span>` : // Checkmark for correct
+                        `<span class="wrong-icon">&#10008;</span>`;
+                    sessionPredictionsTable += `
+                        <tr>
+                            <td>${predIndex + 1}</td>
+                            <td>${pred.actual_label}</td>
+                            <td>${pred.predicted_label}</td>
+                            <td>${correctnessIcon}</td>
+                        </tr>`;
+                });
+
+                sessionPredictionsTable += `</tbody></table>`;
+
+                    let metricsContent = `
+                        <div class="metrics-content">
+                            <p>Accuracy: ${sessionMetrics.accuracy.toFixed(2)}%</p>
+                            <p>Precision: ${sessionMetrics.precision.toFixed(2)}%</p>
+                            <p>Recall: ${sessionMetrics.recall.toFixed(2)}%</p>
+                            <p>F1 Score: ${sessionMetrics.f1_score.toFixed(2)}%</p>
+                            <p>Confusion Matrix:</p>
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr><th>Actual \\ Predicted</th>`;
+
+                    // Assuming binary classification for simplicity; for multi-class, you'd have more headers
+                    for (let i = 0; i < sessionMetrics.confusion_matrix.length; i++) {
+                        metricsContent += `<th>Class ${i}</th>`;
+                    }   
+                    
+                    metricsContent += `</tr></thead><tbody>`;
+
+                    sessionMetrics.confusion_matrix.forEach((row, index) => {
+                        metricsContent += `<tr><th>Class ${index}</th>`;
+                        row.forEach(cell => {
+                            metricsContent += `<td>${cell}</td>`;
+                        });
+                        metricsContent += `</tr>`;
+                    });
+
+                    metricsContent += `</tbody></table></div>`;
+
+                    tabPanesContent += `<div class="tab-pane ${isActive}" id="pane-${subject}-${session}" role="tabpanel">${metricsContent}${sessionPredictionsTable}</div>`;
                 });
 
                 // Construct the card with tabs for each subject
@@ -159,7 +532,9 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                         </div>
                     </div>
                 `; }
-                document.getElementById('predictionMessage').innerHTML = resultsContent;
+                document.getElementById('predictionMessage_train').style.display = 'block';
+                predictionMessageContainer.innerHTML += resultsContent;
+
             // Activate Bootstrap tabs functionality
             $('.nav-tabs a').click(function(e) {
                 e.preventDefault();
@@ -167,7 +542,7 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
             });
 
         } else {
-            document.getElementById('predictionMessage').innerHTML = `
+            document.getElementById('predictionMessage_train').innerHTML = `
                 <div class="alert alert-warning" role="alert">
                     No predictions were made.
                 </div>
@@ -175,7 +550,7 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
         }
     } else {
         // If the operation was not successful, display the error message from the server
-        document.getElementById('predictionMessage').innerHTML = `
+        document.getElementById('predictionMessage_train').innerHTML = `
             <div class="alert alert-danger" role="alert">
                 Error: ${data.details}
             </div>
@@ -184,7 +559,7 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
 }).catch(error => {
     // Handle any errors that occurred during the fetch operation
     console.error('Error:', error);
-    document.getElementById('predictionMessage').innerHTML = `
+    document.getElementById('predictionMessage_train').innerHTML = `
         <div class="alert alert-danger" role="alert">
             Error: ${error.message}
         </div>
@@ -195,14 +570,24 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
     document.getElementById('uploadForm').addEventListener('submit', function(event) {
         event.preventDefault();
         var formData = new FormData(this);
+        let spinner = document.getElementById('loadingSpinner');
+
+        // Show spinner
+        spinner.classList.remove('d-none');
 
         fetch('/mat_predict', {
             method: 'POST',
             body: formData
         }).then(response => response.json()).then(data => {
+            
             if (data.error) {
                 document.getElementById('alertBox').innerHTML = `<div class="alert alert-danger" role="alert">${data.error}</div>`;
+                document.getElementById('alertBox').style.display = 'block';
+
             } else {
+                //Hide spinner
+                spinner.classList.add('d-none');
+
                 // Create a Bootstrap alert for success message
                 var alertSuccessHTML = `<div class="alert alert-success alert-dismissible fade show" role="alert">
                                             All files successfully read
@@ -213,22 +598,53 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
 
                 // Insert the Bootstrap alert into the alertBox
                 document.getElementById('alertBox').innerHTML = alertSuccessHTML;
+                console.log('Form submitted. Attempting to display alertBox.');
+                document.getElementById('alertBox').style.display = 'block';
 
+
+                // Add the Preprocess required message to alertBox
+                var messageContainer = document.getElementById('alertBox'); // Assuming you have an `alertBox` container
+
+                // Create and append the preprocess required message
+                var preprocessRequiredMessageDiv = document.createElement('div');
+                preprocessRequiredMessageDiv.id = 'preprocessRequiredMessage';
+                preprocessRequiredMessageDiv.className = 'message-box mt-3 p-3';
+                preprocessRequiredMessageDiv.innerHTML = '<strong>Raw data requires preprocessing before predictions can be made. Please complete the preprocessing step, and then click on <em>"Extract Features"</em> to proceed with the extraction. This will ensure the data is prepared correctly for prediction.</strong>';
+                messageContainer.appendChild(preprocessRequiredMessageDiv);
                 // Add the Preprocess button to alertBox
-                var preprocessButtonHTML = `<button id="preprocessButton" class="btn btn-primary mt-3">View Preprocess</button>`;
+                var preprocessButtonHTML = `
+                    <div>
+                        <button id="preprocessButton" class="btn btn-primary mt-3">View Preprocess</button>
+                        <div id="loadingSpinner1" class="text-center d-none">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
                 document.getElementById('alertBox').insertAdjacentHTML('beforeend', preprocessButtonHTML);
+
 
                 // Add event listener to the Preprocess button
                 document.getElementById('preprocessButton').addEventListener('click', function() {
                     preprocessButtonClicked = !preprocessButtonClicked; // Toggle button state
+                    let spinner = document.getElementById('loadingSpinner1');
+
 
                     if (preprocessButtonClicked) {
+                        // Show spinner here when the button is clicked
+                        spinner.classList.remove('d-none');
+
                         if (!preprocessingStepsFetched) { // Fetch preprocessing steps only if not fetched before
                             // Call the preprocess function on the backend
+                            
                             fetch('/mat_preprocess_predict', {
                                 method: 'POST'
                                 // No need to send the files again, they're already on the server and in the session
                             }).then(response => response.json()).then(data => {
+                                // Hide spinner here once the data is fetched
+                                spinner.classList.add('d-none');
                                 if (data.error) {
                                     document.getElementById('alertBox').innerHTML = `<div class="alert alert-danger" role="alert">${data.error}</div>`;
                                 } else {
@@ -244,18 +660,25 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                                         stepsList.appendChild(listItem);
                                     });
 
+
+
                                     // Show Extract Features button
                                     var extractFeaturesButton = document.getElementById('extractFeaturesButton');
                                     extractFeaturesButton.style.display = 'block';
                                 }
                             }).catch(error => {
+                                // Hide spinner in case of error
+                                spinner.classList.add('d-none');
                                 console.error('Error:', error);
                             });
 
                             preprocessingStepsFetched = true; // Set flag to indicate preprocessing steps are fetched
                         } else {
+                            // If the steps are already fetched, hide the spinner immediately
+                            spinner.classList.add('d-none');
                             // Show preprocessing steps if already fetched
                             document.getElementById('preprocessingStepsContainer').style.display = 'block';
+                            
                         }
 
                         // Change button text to "Hide Preprocess"
@@ -267,47 +690,81 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                     }
                 });
 
-                // Add event listener to the Extract Features button
-                var extractFeaturesButton = document.getElementById('extractFeaturesButton');
-                extractFeaturesButton.addEventListener('click', function() {
-                    if (!extractFeaturesFetched) { // Fetch features only if not fetched before
-                        // Call the backend function to extract features
-                        fetch('/extract-csp-features_predict', {
-                            method: 'POST'
-                        }).then(response => response.json()).then(data => {
-                            if (data.error) {
-                                document.getElementById('featuresMessage').innerHTML = `<div class="alert alert-danger" role="alert">${data.error}</div>`;
-                            } else {
-                                // Display the features message
-                                document.getElementById('featuresMessage').innerHTML = `<div class="alert alert-info" role="alert">${data.message}</div>`;
-                                // Show Predict button
-                                var predictButton = document.getElementById('predictButton');
-                                predictButton.style.display = 'block';
-                            }
-                        }).catch(error => {
-                            console.error('Error:', error);
-                            document.getElementById('featuresMessage').innerHTML = `<div class="alert alert-danger" role="alert">An error occurred while extracting features.</div>`;
-                        });
+                
+        // Add event listener to the Extract Features button
+        var extractFeaturesButton = document.getElementById('extractFeaturesButton');
+        extractFeaturesButton.addEventListener('click', function() {
+            let spinner = document.getElementById('loadingSpinner2');
+            
+            
+            if (!extractFeaturesFetched) { // Fetch features only if not fetched before
+                // Show spinner here when the button is clicked
+                spinner.classList.remove('d-none');
+                // Call the backend function to extract features
+                fetch('/extract-csp-features_predict', {
+                    method: 'POST'
+                }).then(response => response.json()).then(data => {
+                    spinner.classList.add('d-none');
+                    var featuresMessageContainer = document.getElementById('featuresMessage');
+                    featuresMessageContainer.innerHTML = ''; // Clear previous messages
 
-                        extractFeaturesFetched = true; // Set flag to indicate features are fetched
+                    var messageDiv = document.createElement('div');
+                    messageDiv.className = 'preprocessing-steps'; // Use the same class as preprocessing steps
+
+                    var messageText = document.createElement('p');
+
+                    if (data.error) {
+                        spinner.classList.add('d-none');
+                        var errorMessage = document.createElement('div');
+                        errorMessage.className = 'message-box text-danger mt-3 p-3 border';
+                        errorMessage.textContent = data.error;
+                        document.getElementById('featuresMessage').appendChild(errorMessage);
+                    } else {
+                        // Display the features message
+                        spinner.classList.add('d-none');
+                        messageText.className = 'text-black';
+                        messageText.textContent = data.message;
+
+                        var predictButton = document.getElementById('predictButton');
+                        predictButton.style.display = 'block';
                     }
-
-                    // Toggle visibility of features message
-                    var featuresMessage = document.getElementById('featuresMessage');
-                    featuresMessage.style.display = featuresMessage.style.display === 'none' ? 'block' : 'none';
-
-                    // Change button text based on visibility
-                    this.innerText = this.innerText === 'View Extract Features' ? 'Hide Extract Features' : 'View Extract Features';
+                    messageDiv.appendChild(messageText);
+                    featuresMessageContainer.appendChild(messageDiv);
+                }).catch(error => {
+                    spinner.classList.add('d-none');
+                    console.error('Error:', error);
+                    var errorMessage = document.createElement('div');
+                    errorMessage.className = 'message-box text-danger mt-3 p-3 border';
+                    errorMessage.textContent = 'An error occurred while extracting features.';
+                    document.getElementById('featuresMessage').appendChild(errorMessage);
                 });
 
+                extractFeaturesFetched = true; // Set flag to indicate features are fetched
+            }
+
+            // Toggle visibility of features message
+            var featuresMessage = document.getElementById('featuresMessage');
+            featuresMessage.style.display = featuresMessage.style.display === 'none' ? 'block' : 'none';
+
+            // Change button text based on visibility
+            this.innerText = this.innerText === 'Hide Extract Features' ? 'View Extract Features' : 'Hide Extract Features';
+        });
+
+                
+                 
+                
                 // Add event listener to the Predict button
                 var predictButton = document.getElementById('predictButton');
+
                 predictButton.addEventListener('click', function() {
+                    let spinner = document.getElementById('loadingSpinner3');
                     var selectedModelName = sessionStorage.getItem('selectedModelName');
                 if (!selectedModelName) {
                     document.getElementById('predictionMessage').innerHTML = `<div class="alert alert-danger" role="alert">No model selected.</div>`;
                     return;
                 }
+                // Show spinner here when the button is clicked
+                spinner.classList.remove('d-none');
                 fetch('/perform_mat_prediction', {
                     method: 'POST',
                     headers: {
@@ -315,12 +772,15 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                     },
                     body: JSON.stringify({ model_name: selectedModelName })
                 }).then(function(response) {
+                    spinner.classList.add('d-none');
                     return response.json();
                 }).then(function(data) {
                     if (data.error) {
+                        spinner.classList.add('d-none');
                         document.getElementById('predictionMessage').innerHTML = `<div class="alert alert-danger" role="alert">${data.error}</div>`;
                     } else {
-                            var subjects = {};
+                        spinner.classList.add('d-none');
+                        var subjects = {};
 
             // Group predictions by subject identifier (sub)
             data.predict.forEach(function(subjectPrediction) {
@@ -377,6 +837,46 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                     predictionHTML += `<h5 class="card-title">${model_name} Predictions for ${sub} - ${ses}</h5>`;
                     predictionHTML += `<ul class="list-group">`;
 
+                    // Display metrics if available
+                    var subjectMetrics = data.metrics[`${sub}_${ses}`];  // Construct the key to match the subject_identifier
+                    if (subjectMetrics) {
+                        var modelMetrics = subjectMetrics[model_name]; // Access the nested 'svc' object
+                        if (modelMetrics) {
+                            predictionHTML += `<div class="metrics">`;
+                            if (typeof modelMetrics.accuracy === 'number') {
+                                predictionHTML += `<p>Accuracy: ${modelMetrics.accuracy.toFixed(2)}</p>`;
+                            }    
+                            if (typeof modelMetrics.precision === 'number') {
+                                predictionHTML += `<p>Precision: ${modelMetrics.precision.toFixed(2)}</p>`;
+                            }
+                            if (typeof modelMetrics.recall === 'number') {
+                                predictionHTML += `<p>Recall: ${modelMetrics.recall.toFixed(2)}</p>`;
+                            }
+                            if (typeof modelMetrics.f1_score === 'number') {
+                                predictionHTML += `<p>F1 Score: ${modelMetrics.f1_score.toFixed(2)}</p>`;
+                            }
+                                                // Display confusion matrix as a table
+                            if (modelMetrics.confusion_matrix) {
+                                predictionHTML += `<p>Confusion Matrix:</p>`;
+                                predictionHTML += `<table class="table table-bordered"><thead><tr>`;
+
+                                // Assuming binary classification for simplicity; for multi-class, you'd have more headers
+                                predictionHTML += `<th>Actual \\ Predicted</th><th>Class 0</th><th>Class 1</th></tr></thead><tbody>`;
+
+                                modelMetrics.confusion_matrix.forEach(function(row, index) {
+                                    predictionHTML += `<tr><th>Class ${index}</th>`;
+                                    row.forEach(function(cell) {
+                                        predictionHTML += `<td>${cell}</td>`;
+                                    });
+                                    predictionHTML += `</tr>`;
+                                });
+
+                                predictionHTML += `</tbody></table>`;
+                            }
+                            predictionHTML += `</div>`;
+                        }
+                    }
+
                     predictions.forEach(function(prediction, index) {
                         var trialPrediction = prediction.split(': ')[1];
                         var isCorrect = labels && labels[index] === trialPrediction;
@@ -391,34 +891,36 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
 
                             
             });
+            document.getElementById('predictionMessage').style.display = 'block';
             var goBackButton = document.createElement('button');
-                goBackButton.textContent = 'Go back for selecting other model';
-                goBackButton.style.marginTop = '20px';
-                goBackButton.style.padding = '10px 15px';
-                goBackButton.style.border = 'none';
-                goBackButton.style.borderRadius = '4px';
-                goBackButton.style.backgroundColor = '#007bff';
-                goBackButton.style.color = 'white';
-                goBackButton.style.cursor = 'pointer';
-                goBackButton.addEventListener('click', function() {
-                // Set a flag in session storage indicating that the loading process has started
+            goBackButton.textContent = 'Go back to select another model';
+            goBackButton.className = 'btn btn-outline-dark'; // Use Bootstrap classes
+            goBackButton.style.marginTop = '20px';
+            goBackButton.style.marginRight = '10px'; // Add margin to the right
+            goBackButton.style.cursor = 'pointer';
+            goBackButton.addEventListener('click', function() {
                 sessionStorage.setItem('loadingStatus', 'started');
                 sessionStorage.setItem('loadingMessage', 'Loading, please wait...');
                 document.getElementById('predictButton').innerHTML = "<p>Loading, please wait...</p>";
-                // Redirect to the CSV page
                 window.location.href = '/mat_classification';
-
-                // Make the asynchronous call to the csv_features function
                 fetch('{{ url_for("file_reader.mat_classification") }}', {
-            method: 'POST',
-        })
+                    method: 'POST',
+                })
+            });
 
-            
-                }); 
+            var downloadButton = document.createElement('button');
+            downloadButton.textContent = 'Download Result';
+            downloadButton.className = 'btn btn-outline-primary';
+            downloadButton.style.marginTop = '20px';
+            downloadButton.style.cursor = 'pointer';
+            downloadButton.addEventListener('click', function() {
+                window.location.href = '/download_predictions_mat'; // Modify this URL to your actual download URL
+            });
                         
-                            // Set the innerHTML of the predictionMessage to include all subjects' predictions
-                            document.getElementById('predictionMessage').innerHTML = predictionHTML;
-                            document.getElementById('predictionMessage').appendChild(goBackButton);
+                // Set the innerHTML of the predictionMessage to include all subjects' predictions
+                document.getElementById('predictionMessage').innerHTML = predictionHTML;
+                document.getElementById('predictionMessage').appendChild(goBackButton);
+                document.getElementById('predictionMessage').appendChild(downloadButton);
 
                         }
                 }).catch(function(error) {

@@ -19,7 +19,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold, cross_validate,GridSearchCV, StratifiedShuffleSplit
 from sklearn.metrics import classification_report, accuracy_score,precision_score,f1_score,recall_score,make_scorer,confusion_matrix
-from sklearn.preprocessing import StandardScaler, LabelEncoder, LabelBinarizer, normalize
+from sklearn.preprocessing import StandardScaler, LabelEncoder, LabelBinarizer, normalize, label_binarize
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline, make_pipeline
@@ -157,6 +157,8 @@ def read_eeg_file(file_path):
     try:
         # Create a list to hold messages about data cleanliness
         cleanliness_messages = []
+        global df
+
 
         print(f"Entered read_eeg_file with {file_path}")
 
@@ -174,6 +176,11 @@ def read_eeg_file(file_path):
 
         print(f"Number of samples (time points) in the recording: {len(df)}")
         print("DataFrame shape:" ,df.shape)
+        cleanliness_messages.append(f"Number of samples (time points) in the recording: {len(df)}")
+        cleanliness_messages.append(f"DataFrame shape: {df.shape}")
+        
+
+
         # unique_prefixes = get_unique_prefixes(df.columns)
         # print("Unique prefixes:", unique_prefixes)
         
@@ -213,11 +220,8 @@ def read_eeg_file(file_path):
                 
         print(df.head()) 
         print("DataFrame shape:" ,df.shape)
+        cleanliness_messages.append(f"DataFrame Head: {df.head()}")
         
-
-        if check_processed_from_columns(df, processed_data_keywords):
-            print("The data appears to be processed.")
-            return df, None,cleanliness_messages # Return the DataFrame and None for sfreq
 
         # Check if the first column is non-numeric and should be used as the index
         if not np.issubdtype(df.iloc[:, 0].dtype, np.number):
@@ -233,12 +237,18 @@ def read_eeg_file(file_path):
             time_diffs = np.diff(df['timestamp'].values)
             if np.any(time_diffs == 0):
                 print("Duplicate timestamps found. Sampling frequency cannot be determined.")
-                return None, None,None
             avg_sampling_period = np.mean(time_diffs)
-            sfreq = 1 / avg_sampling_period  # number of samples obtained per second.
-            df.drop('timestamp', axis=1, inplace=True)  # Remove timestamp for MNE
+            sfreq = 1 / avg_sampling_period
+            print("sfreq calculated from timestamps:", sfreq)
         else:
-            sfreq = 250  # You may want to adjust this default frequency
+            sfreq=250
+
+        print("sfreq:",sfreq) 
+
+        if check_processed_from_columns(df, processed_data_keywords):
+            print("The data appears to be processed.")
+            cleanliness_messages.append(f"Sampling frequency is determined: {sfreq}")
+            return df, sfreq,cleanliness_messages # Return the DataFrame and None for sfreq
 
         eeg_data = df.values.T
 
@@ -250,6 +260,9 @@ def read_eeg_file(file_path):
         # Create RawArray
         raw = mne.io.RawArray(data=eeg_data, info=info)
         print(f"Number of samples read: {len(raw)}")
+        print("Sampling frequency is determined:",sfreq)
+        cleanliness_messages.append(f"Sampling frequency is determined: {sfreq}")
+    
 
 
         return raw, sfreq,cleanliness_messages
@@ -336,14 +349,13 @@ def is_mat_data_clean(eeg_data, sfreq):
 
 def read_mat_eeg(file_path):
     try:
+        data_info=[]
         # Load MATLAB file
         mat = scipy.io.loadmat(file_path)
 
         # Access the EEG data under the 'data' key
         eeg_data = mat['data']
-        # if not is_mat_data_clean(eeg_data,250):
-        #     print("The EEG data is not clean. Additional preprocessing may be required.")
-
+      
         # Check the shape of the data
         if len(eeg_data.shape) == 3:
             # Reshape data assuming it is in the format (trials, channels, samples)
@@ -352,6 +364,28 @@ def read_mat_eeg(file_path):
             # Concatenate trials to have a continuous data stream
             eeg_data = np.concatenate(eeg_data, axis=1)  # This concatenates along the second axis (samples)
             eeg_data = eeg_data.reshape(n_channels, n_trials * n_samples)
+
+            print("number of samples:", n_samples)
+            print("number of trials:", n_trials)
+            print("number of samples+trials:",n_trials * n_samples)
+            print("number of channels:", n_channels)
+
+            data_info.append(f"Number of channels: {n_channels}")
+            data_info.append(f"Number of samples: {n_samples}")
+            data_info.append(f"Number of trials: {n_trials}")
+            data_info.append(f"Number of samples*trials: {n_trials * n_samples}")
+
+            if np.isnan(eeg_data).any() or np.isinf(eeg_data).any():
+                print("Data contains NaN or Infinity values")
+                data_info.append("Data contains NaN or Infinity values")
+            else:
+                print("Data does not contain NaN or Infinity values")
+                data_info.append("Data does not contain NaN or Infinity values")
+
+            if np.var(eeg_data, axis=1).min() == 0:  # axis=1 to check variance across time
+                print("EEG data contains flatline channels.")
+                data_info.append("EEG data contains flatline channels.") 
+
         else:
             raise ValueError(f"Unexpected data dimensions {eeg_data.shape}")
 
@@ -361,6 +395,7 @@ def read_mat_eeg(file_path):
 
         # Define the sampling frequency
         sfreq = 250  # Replace with the actual sampling frequency if available
+        data_info.append(f"Sampling Frequency is determined {sfreq}")
 
         # Create MNE info structure
         info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types=ch_types)
@@ -371,14 +406,15 @@ def read_mat_eeg(file_path):
         # Extract labels if 'labels' key exists
         if 'labels' in mat:
             labels = mat['labels'].flatten()  # Ensure it is a 1D array
+
         else:
             raise ValueError("The key 'labels' was not found in the .mat file.")
 
-        return raw, sfreq, labels
+        return raw, sfreq, labels,data_info
 
     except Exception as e:
         print(f"An error occurred while processing {file_path}: {e}")
-        return None, None, None
+        return None, None, None,None
     
     
 def visualize_3d_brain_model(raw):
@@ -1328,14 +1364,29 @@ def csv_modeling():
         # print("Unique classes in y_test:", np.unique(y_test)) 
 
 labels_text_array=[]
+test_indices=None
+train_indices=None
 y_original = [] # original labels: the last column
 def csv_svc_model_new(label_conditions_path):
     global y_original
+    class_info={}
     print("Length of all_features: ", len(all_features))
     print("Length of labels_list: ", len(labels_list))   
     labels_text_array=[]
     X = all_features.iloc[:, :-1]  # features: all columns except the last
     y_original = all_features.iloc[:, -1]  # original labels: the last column
+
+    # Process labels to scale down by millions if applicable and leave non-numeric as is
+    def scale_if_numeric(x):
+        if isinstance(x, (int, float)):  # Check if the value is numeric
+            return x // 1_000_000 if x >= 1_000_000 else x
+        return x  # Return as is if non-numeric
+
+    scaled_y_original = y_original.apply(scale_if_numeric)
+    # Calculate class counts on the processed data
+    class_counts = scaled_y_original.value_counts()
+    print("Class distribution:", class_counts)
+
     labels_array = []
 
     for label in y_original:
@@ -1364,6 +1415,14 @@ def csv_svc_model_new(label_conditions_path):
     # Transform labels to encoded numeric labels
     y_binned = label_encoder.transform(y_original)
 
+    # Calculate the number of unique classes
+    num_classes = len(np.unique(y_binned))
+    print("Number of classes:", num_classes)
+    class_info = {
+        "Number of classes": num_classes,
+        "Class distribution": class_counts.to_dict()  # Convert to dict to ensure compatibility
+    }
+
     dump(label_encoder, encoder_path)
 
     # print("Y binned:", y_binned)
@@ -1374,24 +1433,21 @@ def csv_svc_model_new(label_conditions_path):
 
     # Perform a train-test split
     global X_train, X_test, y_train, y_test 
+    global train_indices
+    global test_indices
     X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
+    train_indices = X_train.index
+    test_indices = X_test.index
 
     # Standardize the features
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test= scaler.transform(X_test)
 
-
-
     # Instantiate and train the SVC model
-    
     clf =SVC()
     clf.fit(X_train, y_train)
     y_pred_svc = clf.predict(X_test)
-    progress_updates.append(20)
-    # sleep(0.1)
-    # session['progress'] = 20
-    
     
     acc_svc = round(clf.score(X_train, y_train) * 100, 2)
     # acc_test = round(clf.score(X_test, y_test) * 100, 2)
@@ -1424,7 +1480,7 @@ def csv_svc_model_new(label_conditions_path):
     result_svc_csv['Recall'].append(recall)
 
     
-    return accuracy_svc_csv, result_svc_csv, labels_text_array,y_original
+    return accuracy_svc_csv, result_svc_csv, labels_text_array,y_original,class_info
 
 def csv_svc_model(label_conditions_path):
 
@@ -1543,11 +1599,23 @@ def csv_svc_model(label_conditions_path):
 def csv_random_model(label_conditions_path):
 
     global y_original
+    class_info={}
     print("Length of all_features: ", len(all_features))
     print("Length of labels_list: ", len(labels_list))   
     labels_text_array=[]
     X = all_features.iloc[:, :-1]  # features: all columns except the last
     y_original = all_features.iloc[:, -1]  # original labels: the last column
+    # Process labels to scale down by millions if applicable and leave non-numeric as is
+    def scale_if_numeric(x):
+        if isinstance(x, (int, float)):  # Check if the value is numeric
+            return x // 1_000_000 if x >= 1_000_000 else x
+        return x  # Return as is if non-numeric
+
+    scaled_y_original = y_original.apply(scale_if_numeric)
+    # Calculate class counts on the processed data
+    class_counts = scaled_y_original.value_counts()
+    print("Class distribution:", class_counts)
+
     labels_array = []
 
     for label in y_original:
@@ -1575,6 +1643,14 @@ def csv_random_model(label_conditions_path):
     # Transform labels to encoded numeric labels
     y_binned = label_encoder.transform(y_original)
 
+    # Calculate the number of unique classes
+    num_classes = len(np.unique(y_binned))
+    print("Number of classes:", num_classes)
+    class_info = {
+        "Number of classes": num_classes,
+        "Class distribution": class_counts.to_dict()  # Convert to dict to ensure compatibility
+    }
+
     dump(label_encoder, encoder_path)
 
     print("Y binned:", y_binned)
@@ -1584,8 +1660,12 @@ def csv_random_model(label_conditions_path):
     print("Y unique:",np.unique(y_binned))  # To see the unique values
 
     # Perform a train-test split
-    global X_train, X_test, y_train, y_test
+    global X_train, X_test, y_train, y_test 
+    global train_indices
+    global test_indices
     X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
+    train_indices = X_train.index
+    test_indices = X_test.index
 
     # Standardize the features
     scaler = StandardScaler()
@@ -1649,17 +1729,29 @@ def csv_random_model(label_conditions_path):
     result_random_csv['Precision'].append(precision)
     result_random_csv['Recall'].append(recall)
 
-    return accuracy_random_csv,result_random_csv,labels_text_array,y_original
+    return accuracy_random_csv,result_random_csv,labels_text_array,y_original,class_info
 
 def csv_logistic_model(label_conditions_path):
      
     global y_original
+    class_info={}
     print("Length of all_features: ", len(all_features))
     print("Length of labels_list: ", len(labels_list))   
     
     labels_text_array=[]
     X = all_features.iloc[:, :-1]  # features: all columns except the last
     y_original = all_features.iloc[:, -1]  # original labels: the last column
+    # Process labels to scale down by millions if applicable and leave non-numeric as is
+    def scale_if_numeric(x):
+        if isinstance(x, (int, float)):  # Check if the value is numeric
+            return x // 1_000_000 if x >= 1_000_000 else x
+        return x  # Return as is if non-numeric
+
+    scaled_y_original = y_original.apply(scale_if_numeric)
+    # Calculate class counts on the processed data
+    class_counts = scaled_y_original.value_counts()
+    print("Class distribution:", class_counts)
+
     labels_array = []
 
     for label in y_original:
@@ -1687,6 +1779,14 @@ def csv_logistic_model(label_conditions_path):
     # Transform labels to encoded numeric labels
     y_binned = label_encoder.transform(y_original)
 
+    # Calculate the number of unique classes
+    num_classes = len(np.unique(y_binned))
+    print("Number of classes:", num_classes)
+    class_info = {
+        "Number of classes": num_classes,
+        "Class distribution": class_counts.to_dict()  # Convert to dict to ensure compatibility
+    }
+
     dump(label_encoder, encoder_path)
 
     print("Y binned:", y_binned)
@@ -1696,8 +1796,12 @@ def csv_logistic_model(label_conditions_path):
     print("Y unique:",np.unique(y_binned))  # To see the unique values
 
     # Perform a train-test split
-    global X_train, X_test, y_train, y_test
+    global X_train, X_test, y_train, y_test 
+    global train_indices
+    global test_indices
     X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
+    train_indices = X_train.index
+    test_indices = X_test.index
 
     # Standardize the features
     scaler = StandardScaler()
@@ -1756,12 +1860,13 @@ def csv_logistic_model(label_conditions_path):
         result_logistic_csv['Precision'].append(precision)
         result_logistic_csv['Recall'].append(recall)
     
-    return accuracy_logistic_csv,result_logistic_csv,labels_text_array,y_original
+    return accuracy_logistic_csv,result_logistic_csv,labels_text_array,y_original,class_info
 
 
 def csv_knn_model(label_conditions_path):
 
     global y_original
+    class_info={}
 
     print("Length of all_features: ", len(all_features))
     print("Length of labels_list: ", len(labels_list))   
@@ -1769,6 +1874,17 @@ def csv_knn_model(label_conditions_path):
     labels_text_array=[]
     X = all_features.iloc[:, :-1]  # features: all columns except the last
     y_original = all_features.iloc[:, -1]  # original labels: the last column
+    # Process labels to scale down by millions if applicable and leave non-numeric as is
+    def scale_if_numeric(x):
+        if isinstance(x, (int, float)):  # Check if the value is numeric
+            return x // 1_000_000 if x >= 1_000_000 else x
+        return x  # Return as is if non-numeric
+
+    scaled_y_original = y_original.apply(scale_if_numeric)
+    # Calculate class counts on the processed data
+    class_counts = scaled_y_original.value_counts()
+    print("Class distribution:", class_counts)
+
     labels_array = []
 
     for label in y_original:
@@ -1796,6 +1912,14 @@ def csv_knn_model(label_conditions_path):
     # Transform labels to encoded numeric labels
     y_binned = label_encoder.transform(y_original)
 
+    # Calculate the number of unique classes
+    num_classes = len(np.unique(y_binned))
+    print("Number of classes:", num_classes)
+    class_info = {
+        "Number of classes": num_classes,
+        "Class distribution": class_counts.to_dict()  # Convert to dict to ensure compatibility
+    }
+
     dump(label_encoder, encoder_path)
 
     print("Y binned:", y_binned)
@@ -1805,8 +1929,12 @@ def csv_knn_model(label_conditions_path):
     print("Y unique:",np.unique(y_binned))  # To see the unique values
 
     # Perform a train-test split
-    global X_train, X_test, y_train, y_test
+    global X_train, X_test, y_train, y_test 
+    global train_indices
+    global test_indices
     X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
+    train_indices = X_train.index
+    test_indices = X_test.index
 
     # Standardize the features
     scaler = StandardScaler()
@@ -1864,12 +1992,13 @@ def csv_knn_model(label_conditions_path):
         result_knn_csv['Precision'].append(precision)
         result_knn_csv['Recall'].append(recall)
     
-    return accuracy_knn_csv,result_knn_csv,labels_text_array,y_original
+    return accuracy_knn_csv,result_knn_csv,labels_text_array,y_original,class_info
 
 
 def csv_cnn_model(label_conditions_path):
 
     global y_original
+    class_info={}
 
     print("Length of all_features: ", len(all_features))
     print("Length of labels_list: ", len(labels_list))   
@@ -1877,6 +2006,17 @@ def csv_cnn_model(label_conditions_path):
     labels_text_array=[]
     X = all_features.iloc[:, :-1]  # features: all columns except the last
     y_original = all_features.iloc[:, -1]  # original labels: the last column
+    # Process labels to scale down by millions if applicable and leave non-numeric as is
+    def scale_if_numeric(x):
+        if isinstance(x, (int, float)):  # Check if the value is numeric
+            return x // 1_000_000 if x >= 1_000_000 else x
+        return x  # Return as is if non-numeric
+
+    scaled_y_original = y_original.apply(scale_if_numeric)
+    # Calculate class counts on the processed data
+    class_counts = scaled_y_original.value_counts()
+    print("Class distribution:", class_counts)
+
     labels_array = []
 
     for label in y_original:
@@ -1904,6 +2044,14 @@ def csv_cnn_model(label_conditions_path):
     # Transform labels to encoded numeric labels
     y_binned = label_encoder.transform(y_original)
 
+    # Calculate the number of unique classes
+    num_classes = len(np.unique(y_binned))
+    print("Number of classes:", num_classes)
+    class_info = {
+        "Number of classes": num_classes,
+        "Class distribution": class_counts.to_dict()  # Convert to dict to ensure compatibility
+    }
+
     dump(label_encoder, encoder_path)
 
     print("Y binned:", y_binned)
@@ -1913,8 +2061,12 @@ def csv_cnn_model(label_conditions_path):
     print("Y unique:",np.unique(y_binned))  # To see the unique values
 
     # Perform a train-test split
-    global X_train, X_test, y_train, y_test
+    global X_train, X_test, y_train, y_test 
+    global train_indices
+    global test_indices
     X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2)
+    train_indices = X_train.index
+    test_indices = X_test.index
 
     # Standardize the features
     scaler = StandardScaler()
@@ -1990,7 +2142,7 @@ def csv_cnn_model(label_conditions_path):
         result_cnn_csv['Precision'].append(precision)
         result_cnn_csv['Recall'].append(recall)
     
-    return accuracy_cnn_csv,result_cnn_csv,labels_text_array,y_original
+    return accuracy_cnn_csv,result_cnn_csv,labels_text_array,y_original,class_info
 
 def read_label_conditions(file_path):
     print("entered read label")
@@ -2082,6 +2234,8 @@ def predict_on_training_data(model_name,label_conditions):
         'knn': model_knn,
         'cnn': model_cnn
     }
+
+    detailed_messages=[]
     
     if model_name not in model_paths:
         raise ValueError(f"The model name {model_name} is not recognized.")
@@ -2101,6 +2255,34 @@ def predict_on_training_data(model_name,label_conditions):
     print(f"Scaler file path: {scaler_path}")
     print(f"Label encoder file path: {encoder_path}")
 
+    # Number of classes
+    num_classes = len(label_encoder.classes_)
+    print(f"Number of classes: {num_classes}")
+    detailed_messages.append(f"Number of classes: {num_classes}")
+
+
+    # Assuming X_test and y_test are defined and accessible
+    num_samples_test = len(y_test)
+    num_samples_train=len(y_train)
+    original_num_samples = len(df)
+
+    print(f"Number of samples (time points) in the recording: {len(df)}")
+    print(f"Number of samples: {num_samples_test}")
+    print(f"Number of samples: {num_samples_train}")
+
+    detailed_messages.append(f"Original number of samples is {original_num_samples}.")
+    detailed_messages.append("Data is split into 80% training and 20% testing.")
+    detailed_messages.append(f"Number of training set samples: {num_samples_train}")
+    detailed_messages.append(f"Number of testing set samples: {num_samples_test}")
+    detailed_messages.append(f"Sum of training and testing samples: {num_samples_train + num_samples_test}")
+
+    
+    if (num_samples_train + num_samples_test) == original_num_samples:
+        detailed_messages.append("The total number of training and testing samples matches the original number of samples.")
+    else:
+        detailed_messages.append("Warning: The total number of training and testing samples does not match the original number of samples.")
+
+
     #X_train_scaled = scaler.transform(X_train)
     #clf.fit(X_test,y_test)
 
@@ -2118,10 +2300,20 @@ def predict_on_training_data(model_name,label_conditions):
     print("Inverse Transformed Predictions:", y_pred_train_inverse)
     print("Label Conditions:", label_conditions)
 
+    
+
     if np.issubdtype(y_pred_train_inverse.dtype, np.floating):
         label_predictions = [str(int(float(label)/1000000)) for label in y_pred_train_inverse]
     else:
         label_predictions = [str(label).lower() for label in y_pred_train_inverse]
+
+    # Calculate the distribution of classes
+    unique_classes, class_counts = np.unique(label_predictions, return_counts=True)
+    class_distribution = dict(zip(unique_classes, class_counts))
+    print("Class Distribution in Training Data:", class_distribution)
+    detailed_messages.append(f"Class Distribution in Training Data: {class_distribution}")
+
+    
 
     accuracy = accuracy_score(y_train_inverse, y_pred_train_inverse)*100
     precision = precision_score(y_train_inverse, y_pred_train_inverse, average='weighted')*100
@@ -2135,9 +2327,44 @@ def predict_on_training_data(model_name,label_conditions):
     correct_predictions = y_train_inverse == y_pred_train_inverse  # This creates a boolean array
 
     formatted_predictions_train = []
-    for i, (condition, correct) in enumerate(zip(conditions, correct_predictions)):
-        status = "Correct" if correct else "Incorrect"
-        formatted_predictions_train.append(f"Person {i+1}: {condition} - {status}")
+    # Accessing True Positives, False Positives, True Negatives, False Negatives
+    TP = np.diag(conf_mat)  # True Positives are on the diagonal
+    print("tp:",TP)
+    FP = conf_mat.sum(axis=0) - TP  # False Positives are the column sum minus diagonal
+    print("FP:",FP)
+    FN = conf_mat.sum(axis=1) - TP  # False Negatives are the row sum minus diagonal
+    print("FN:",FN)
+    TN = conf_mat.sum() - (FP + FN + TP)  # True Negatives are total sum minus TP, FP, FN
+    print("TN:",TN)
+
+    y_test_labels = label_encoder.inverse_transform(y_test)
+    y_pred_labels = label_encoder.inverse_transform(y_pred_train)
+
+    # Enhance the output to show detailed classification results
+    for i, (index, true_label, predicted_label, condition) in enumerate(zip(test_indices, y_test_labels, y_pred_labels, conditions)):
+        true_label = y_test_labels[i]
+        predicted_label = y_pred_labels[i]
+        
+        if true_label == predicted_label:
+            if true_label in TP:
+                detail = 'True Negative'
+            else:
+                detail = 'True Positive'
+        else:
+            if predicted_label in FP:
+                detail = 'False Negative'
+            else:
+                detail = 'False Positive'
+
+        formatted_predictions_train.append(f"Data Index {index+2}: Condition = {condition} - {detail}")
+
+    detailed_messages.append(f"Green Check means True Positive")
+    detailed_messages.append(f"Blue Check means True Negative")
+    detailed_messages.append(f"Yellow Check means False Positive")
+    detailed_messages.append(f"Red Check means False Negative")
+
+    
+  
 
     # for message in formatted_predictions_train:
     #         print("Message:", message)    
@@ -2157,8 +2384,10 @@ def predict_on_training_data(model_name,label_conditions):
     print(f'Recall: {recall}')
     print(f'F1 Score: {f1}')
     print(f'Confusion Matrix:\n{conf_mat}')
+    print("detailed message:",detailed_messages)
 
-    return formatted_predictions_train,result_predict_train
+    return formatted_predictions_train,result_predict_train,detailed_messages
+
 
 def load_and_predict_svc(new_data, label_conditions,y_original):
     result_predict=[]
@@ -3880,7 +4109,7 @@ def main():
 
             
             if process_with_builtin_functions:
-                raw, sfreq, labels = read_mat_eeg(file_path)
+                raw, sfreq, labels,data_info = read_mat_eeg(file_path)
                 preprocessed_raw, preprocessing_steps = preprocess_raw_eeg(raw, 250, subject_identifier)
                 features_message, features_df = extract_features_csp(preprocessed_raw, sfreq, labels)
 
@@ -3895,7 +4124,7 @@ def main():
             
            
             else:
-                raw_data, sfreq, labels= read_mat_eeg(file_path) # Handling .mat file 
+                raw_data, sfreq, labels,data_info= read_mat_eeg(file_path) # Handling .mat file 
 
                 
                 preprocessed_raw ,preprocessing_steps= preprocess_raw_eeg(raw_data, 250,subject_identifier)

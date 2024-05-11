@@ -233,7 +233,7 @@ def calculate_svc():
             raise ValueError("No label conditions file found.")
 
         print("labels_original", labels_original)
-        accuracies, results, labels_array_original,y_original = csv_svc_model_new(labels_original)
+        accuracies, results, labels_array_original, y_original, class_info = csv_svc_model_new(labels_original)
 
         session['y_original']=y_original
 
@@ -249,6 +249,7 @@ def calculate_svc():
         return jsonify({
             'accuracies': accuracies,
             'results': results,
+            'class_info': class_info
         })
     
     except Exception as e:
@@ -264,7 +265,7 @@ def calculate_random():
             raise ValueError("No label conditions file found.")
 
         print("labels_original", labels_original)
-        accuracies, results, labels_array_original,y_original = csv_random_model(labels_original)
+        accuracies, results, labels_array_original,y_original,class_info = csv_random_model(labels_original)
 
         session['y_original']=y_original
 
@@ -279,7 +280,8 @@ def calculate_random():
         print("labels in random:",labels_array_original)
         return jsonify({
             'accuracies': accuracies,
-            'results': results
+            'results': results,
+            'class_info': class_info
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500   
@@ -292,7 +294,7 @@ def calculate_logistic():
             raise ValueError("No label conditions file found.")
 
         print("labels_original", labels_original)
-        accuracies, results, labels_array_original,y_original = csv_logistic_model(labels_original)
+        accuracies, results, labels_array_original,y_original,class_info = csv_logistic_model(labels_original)
 
         session['y_original']=y_original
 
@@ -307,7 +309,8 @@ def calculate_logistic():
         session['labels_array_original'] = labels_array_original
         return jsonify({
             'accuracies': accuracies,
-            'results': results
+            'results': results,
+            'class_info': class_info
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500    
@@ -320,7 +323,7 @@ def calculate_knn():
             raise ValueError("No label conditions file found.")
 
         print("labels_original", labels_original)
-        accuracies, results, labels_array_original,y_original = csv_knn_model(labels_original)
+        accuracies, results, labels_array_original,y_original,class_info = csv_knn_model(labels_original)
 
         session['y_original']=y_original
 
@@ -335,7 +338,8 @@ def calculate_knn():
         session['labels_array_original'] = labels_array_original
         return jsonify({
             'accuracies': accuracies,
-            'results': results
+            'results': results,
+            'class_info': class_info
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500  
@@ -348,7 +352,7 @@ def calculate_cnn():
             raise ValueError("No label conditions file found.")
 
         print("labels_original", labels_original)
-        accuracies, results, labels_array_original,y_original = csv_cnn_model(labels_original)
+        accuracies, results, labels_array_original,y_original,class_info = csv_cnn_model(labels_original)
 
         session['y_original']=y_original
 
@@ -363,7 +367,8 @@ def calculate_cnn():
         session['labels_array_original'] = labels_array_original
         return jsonify({
             'accuracies': accuracies,
-            'results': results
+            'results': results,
+            'class_info': class_info
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500            
@@ -371,7 +376,29 @@ def calculate_cnn():
 @bp_file_reader.route('/progress')
 def progress():
     progress = session.get('progress', 0)
-    return jsonify({'progress': progress})  
+    return jsonify({'progress': progress}) 
+
+
+@bp_file_reader.route('/mat_data_info', methods=['GET', 'POST'])   
+def mat_data_info():
+    mat_file_paths = session.get('mat_file_paths', [])
+    all_data_info = []  # This will store all the data info including subject identifiers
+
+    for file_path in mat_file_paths:
+        # Extract the subject identifier from the filename
+        filename = os.path.basename(file_path)
+        filename_parts = filename.split('_')
+        subject_identifier = '_'.join(filename_parts[1:3])  # Assumes format like 'sub-XXX_ses-XX'
+
+        # Read EEG data and get info
+        raw, sfreq, labels, data_info = read_mat_eeg(file_path)
+        
+        # Append subject identifier to each piece of data info
+        subject_data_info = [f"{subject_identifier}: {info}" for info in data_info]
+        all_data_info.extend(subject_data_info)  # Collect info with identifiers
+
+    return jsonify(data_info=all_data_info)
+    
 
 
 @bp_file_reader.route('/mat_classification', methods=['GET', 'POST'])      
@@ -393,7 +420,7 @@ def mat_classification():
                 filename_parts = filename.split('_')
                 subject_identifier = '_'.join(filename_parts[1:3])  # sub-XXX_ses-XX
 
-                raw, sfreq, labels = read_mat_eeg(file_path)
+                raw, sfreq, labels,data_info = read_mat_eeg(file_path)
                 preprocessed_raw, preprocessing_steps = preprocess_raw_eeg(raw, sfreq, subject_identifier)
                 features_message,features_df = extract_features_csp(preprocessed_raw, 250, labels, epoch_length=1.0)
                 accuracy_messages,label_get= mat_modeling_svc(subject_identifier, features_df, labels)
@@ -1056,7 +1083,7 @@ def perform_predict_on_training_data():
     try:
         label_conditions = session.get('label_conditions_in_predict_train', {})
         print("label condition in predict train:", label_conditions)
-        formatted_predictions_train, result_predict_train = predict_on_training_data(model_name, label_conditions)
+        formatted_predictions_train, result_predict_train,detailed_messages = predict_on_training_data(model_name, label_conditions)
 
         # Convert all numpy arrays in the results to lists
         result_predict_train = numpy_to_list(result_predict_train)
@@ -1065,10 +1092,11 @@ def perform_predict_on_training_data():
         session['download_performance']=result_predict_train
 
         return jsonify({
-            'status': 'success',
-            'formatted_predictions_train': formatted_predictions_train,
-            'result_predict_train': result_predict_train
-        })
+        'status': 'success',
+        'formatted_predictions_train': formatted_predictions_train,
+        'result_predict_train': result_predict_train,
+        'detailed_messages': detailed_messages  # Include this in the response
+    })
 
     except Exception as e:
         print(traceback.format_exc())
@@ -1159,7 +1187,7 @@ def mat_preprocess_predict():
                 filename_parts = filename.split('_')
                 subject_identifier = '_'.join(filename_parts[1:3])  # sub-XXX_ses-XX
 
-                raw, sfreq, labels = read_mat_eeg(file_path)
+                raw, sfreq, labels,data_info = read_mat_eeg(file_path)
                 preprocessed_raw_predict, preprocessing_steps_predict = preprocess_raw_eeg(raw, sfreq, subject_identifier)
                 for step in preprocessing_steps_predict:
                             if step not in all_preprocessing_steps_predict:
@@ -1299,7 +1327,7 @@ def perform_mat_prediction():
             filename_parts = filename.split('_')
             subject_identifier = '_'.join(filename_parts[1:3])  # sub-XXX_ses-XX
 
-            raw, sfreq, labels = read_mat_eeg(file_path)
+            raw, sfreq, labels,data_info = read_mat_eeg(file_path)
             preprocessed_raw_predict, preprocessing_steps_predict = preprocess_raw_eeg(raw, sfreq, subject_identifier)
             features_message, features_df = extract_features_csp(preprocessed_raw_predict, sfreq, labels)
             
@@ -1434,9 +1462,9 @@ def download_predictions_mat():
             elements.append(Paragraph(step, body_style))
 
         # Feature Extraction Steps
-        elements.append(Paragraph("<b>Feature Extraction Steps:</b>", heading_style))
-        for message in extract_messages:
-            elements.append(Paragraph(message, body_style))
+        # elements.append(Paragraph("<b>Feature Extraction Steps:</b>", heading_style))
+        # for message in extract_messages:
+        #     elements.append(Paragraph(message, body_style))
 
         # Predictions
         elements.append(Paragraph("<b>Predictions:</b>", heading_style))

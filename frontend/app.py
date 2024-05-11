@@ -82,9 +82,9 @@ def mat_predict():
 
     
 
-# def open_browser():
-#      webbrowser.open_new('http://127.0.0.1:5000/')
+def open_browser():
+     webbrowser.open_new('http://127.0.0.1:5000/')
 
 if __name__ == '__main__':
-#     Timer(1, open_browser).start()  # Wait 1 second before opening the browser
+    Timer(1, open_browser).start()  # Wait 1 second before opening the browser
     app.run(debug=True, use_reloader=False)

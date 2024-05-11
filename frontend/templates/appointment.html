@@ -136,7 +136,14 @@
                         <p class="text-white mb-4">Choose the path that best fits your needs for EEG data examination and utilization:</p>
                         <div>
                             <h2 class="text-white mb-3">Feature Extraction for MAT Files</h2>
-                            <p class="text-white mb-4">If you have a MAT file and need to extract features using various methods for a single classification model, this option is for you.</p>
+                            <p class="text-white mb-4">
+                                If you are working with MAT files, it's essential to understand that these are MATLAB files containing raw data that typically need preprocessing to remove noises and artifacts.<br/>
+                                A MAT file, originating from MATLAB, often requires thorough cleaning and preparation before analysis.<br/>
+                                After this initial preprocessing, various statistical analysis methods can be applied to extract meaningful features from the data.<br/>
+                                These extracted features are then used as inputs for classification models.<br/>
+                                This process allows for the accurate application of machine learning techniques to the cleaned and structured data contained within MAT files.<br/>
+                                So, if you have a MAT file and need to extract features using various methods for a single classification model, this option is for you.
+                            </p>
                             <a href="/features" class="btn btn-light mb-4">Extract Features</a>
                         </div>
                         <div>

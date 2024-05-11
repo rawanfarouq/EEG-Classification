@@ -183,8 +183,8 @@
     <div class="container-fluid mt-5 pt-3">
         <div class="text-center mb-4">
             <h2>EEG Data Preparation</h2>
-            <p>Begin your EEG analysis by ensuring your data is clean. Clean data is essential for accurate modeling. Click the button below to verify the cleanliness of your EEG data.</p>
-            <button id="cleanCheckButton" class="btn btn-primary">View Cleanliness</button>
+            <p>Ensure data cleanliness, identify sampling frequency, and preview your EEG dataset by clicking the button below.</p>
+            <button id="cleanCheckButton" class="btn btn-primary">View Data Quality and Overview</button>
             <div id="loadingSpinner" class="text-center d-none">
                 <div class="spinner-border text-primary" role="status">
                     <span class="sr-only">Loading...</span>
@@ -204,7 +204,7 @@
             <h2>Feature Identification</h2>
             <p>With clean EEG data confirmed, our system has preprocessed and extracted features ready for analysis. The following button will display the extracted features utilizing known and widely used methods in the field. </p>
             <p>Please note that it's essential to complete this step to ensure optimal modeling performance. If this step is skipped, the model may not perform as expected.</p>
-            <button id="csvIdentificationButton" class="btn btn-secondary">CSV Identification</button>
+            <button id="csvIdentificationButton" class="btn btn-secondary">Identification</button>
             <div id="loadingSpinner1" class="text-center d-none">
                 <div class="spinner-border text-secondary" role="status">
                     <span class="visually-hidden">Loading...</span>
@@ -276,64 +276,75 @@
     let button = document.getElementById('cleanCheckButton');
 
     if (!resultsFetched) {
-        // Show the spinner
         spinner.classList.remove('d-none');
-        // Disable the button while fetching
         button.disabled = true;
         button.textContent = 'Checking...';
 
         fetch('/check_csv', {
             method: 'POST',
-            // Include other necessary request headers or credentials if needed
+            // Additional headers or credentials can be included here if necessary
         }).then(response => response.json())
         .then(data => {
             resultsList.innerHTML = ''; // Clear previous results
-            
+
             data.forEach((result) => {
-                // Loop through each cleanliness message and create a list item for each one
                 result.cleanliness_messages.forEach((message) => {
                     let li = document.createElement('li');
-                    let strong = document.createElement('strong'); // Create strong element
-                    strong.textContent = message; // Set message text
                     li.classList.add('list-group-item');
-                    li.appendChild(strong); // Append strong element to list item
+
+                    // Check if the message is a DataFrame head
+                    if (message.startsWith('DataFrame Head:')) {
+                        let table = createTableFromDataFrameHead(message.substring(15)); // Remove the 'DataFrame Head:' part
+                        li.appendChild(table);
+                    } else {
+                        let strong = document.createElement('strong');
+                        strong.textContent = message;
+                        li.appendChild(strong);
+                    }
                     resultsList.appendChild(li);
                 });
             });
-            
-            // Hide the spinner
-            spinner.classList.add('d-none');
-            // Show the results
-            resultsDiv.classList.remove('d-none');
-            // Change button text to "Hide Cleanliness"
-            button.textContent = 'Hide Cleanliness';
-            // Enable the button again
-            button.disabled = false;
 
-            // Update flag to indicate results have been fetched
+            spinner.classList.add('d-none');
+            resultsDiv.classList.remove('d-none');
+            button.textContent = 'Hide Data Quality and Overview';
+            button.disabled = false;
             resultsFetched = true;
         }).catch(error => {
             console.error('Error:', error);
-            // Hide the spinner and enable the button in case of error
             spinner.classList.add('d-none');
             button.disabled = false;
-            button.textContent = 'View Cleanliness';
+            button.textContent = 'View Data Quality and Overview';
         });
     } else {
-        // Results have already been fetched, toggle visibility
         if (resultsDiv.classList.contains('d-none')) {
-            // Results are currently hidden, show them
             resultsDiv.classList.remove('d-none');
-            // Change button text to "Hide Cleanliness"
-            button.textContent = 'Hide Cleanliness';
+            button.textContent = 'Hide Data Quality and Overview';
         } else {
-            // Results are currently visible, hide them
             resultsDiv.classList.add('d-none');
-            // Change button text to "View Cleanliness"
-            button.textContent = 'View Cleanliness';
+            button.textContent = 'View Data Quality and Overview';
         }
     }
 });
+
+function createTableFromDataFrameHead(dataHead) {
+    let table = document.createElement('table');
+    table.classList.add('table', 'table-sm', 'table-dark', 'table-bordered');
+    let rows = dataHead.split('\n');
+
+    rows.forEach((row, index) => {
+        let tr = document.createElement('tr');
+        let cols = row.split(/ +(?=\S)/); // Split by spaces but not within quoted strings
+
+        cols.forEach(col => {
+            let td = document.createElement(index === 0 ? 'th' : 'td'); // Use 'th' for header row
+            td.textContent = col.trim();
+            tr.appendChild(td);
+        });
+        table.appendChild(tr);
+    });
+    return table;
+}
     </script>
     
     
@@ -481,7 +492,7 @@ document.getElementById('getHighestAccuracyButton').addEventListener('click', fu
         alert.style.width = '50%'; // Adjust the width as needed
         alert.style.margin = '0 auto';
         alert.innerHTML = `
-            Please press CSV Identification first so we can model your data.
+            Please press Identification first so we can model your data.
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         `;
         alertContainer.innerHTML = ''; // Clear previous alerts
@@ -490,8 +501,7 @@ document.getElementById('getHighestAccuracyButton').addEventListener('click', fu
         } else {
             // Assuming the endpoint naming follows the convention 'calculate-{modelName}'
             const modelName = endpoint.replace('calculate-', '');
-            console.log(modelName)
-            displayAccuracies(data.results, modelName);
+            displayAccuracies(data.results, modelName, data.class_info);
         }
     })
     .catch(error => {
@@ -503,18 +513,16 @@ document.getElementById('getHighestAccuracyButton').addEventListener('click', fu
         alert.style.width = '50%'; // Adjust the width as needed
          alert.style.margin = '0 auto';
         alert.innerHTML = `
-            Please press CSV Identification first so we can model your data.
+            Please press Identification first so we can model your data.
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         `;
         alertContainer.innerHTML = ''; // Clear previous alerts
         alertContainer.appendChild(alert);
         console.error('Error:', error);
     });
-}
-     
-     
+}    
     
-function displayAccuracies(accuracies, modelName) {
+function displayAccuracies(accuracies, modelName, classInfo) {
     let accuraciesContainer = document.getElementById('accuraciesContainer');
     let modelPanelId = 'model-panel-' + modelName;
     let modelPanel = document.getElementById(modelPanelId);
@@ -562,6 +570,26 @@ function displayAccuracies(accuracies, modelName) {
 
     // Add new list items to the list group
     let listGroup = modelPanel.querySelector('.list-group');
+
+    // Add class info to the same list, format class distribution specially
+    Object.keys(classInfo).forEach(key => {
+        let listItem = document.createElement('li');
+        listItem.className = 'list-group-item';
+        if (key === "Class distribution") {
+            listItem.textContent = key + ':';
+            listGroup.appendChild(listItem);
+            Object.keys(classInfo[key]).forEach(subKey => {
+                let subListItem = document.createElement('li');
+                subListItem.className = 'list-group-item';
+                subListItem.textContent = `${subKey}: ${classInfo[key][subKey]}`;
+                listGroup.appendChild(subListItem);
+            });
+        } else {
+            listItem.textContent = `${key}: ${JSON.stringify(classInfo[key])}`;
+            listGroup.appendChild(listItem);
+        }
+    });
+
     keysOrder.forEach(key => {
         if (accuracies.hasOwnProperty(key)) { // Check if the key exists in the accuracy object
             let listItem = document.createElement('li');
@@ -570,6 +598,7 @@ function displayAccuracies(accuracies, modelName) {
             listGroup.appendChild(listItem);
         }
     });
+
 
     // Ensure the model panel is visible if it was previously hidden
     $(modelPanel).show();

@@ -131,7 +131,30 @@
         margin-left: auto;
         margin-right: auto;
         text-align: center; /* Center the text inside the alert */
-    }
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        #dataInfoContainer{
+            background: #f8f9fa; /* A light grey background */
+            padding: 5px;
+            width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* A subtle shadow for depth */
+            border-left: 4px solid #007bff; /* A blue left border */
+            margin-bottom: 20px; /* Spacing below the container */
+            animation: slideIn 1.0s ease-out; /* Animation for the message box */
+            font-weight: bold; /* Make text bold */
+        }
      
     </style>
 </head>
@@ -166,7 +189,7 @@
        <!-- Navbar Start -->
        <nav class="navbar navbar-expand-lg bg-white navbar-light shadow-sm px-5 py-3 py-lg-0" style="width: 100%;">
            <a href="index.html" class="navbar-brand p-0">
-               <h1 class="m-0 text-primary"><i class="fa fa-tooth me-2"></i>EEG Hub</h1>
+               <h1 class="m-0 text-primary"><i class="fa fa-brain me-2"></i>EEG Hub</h1>
            </a>
            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse">
                <span class="navbar-toggler-icon"></span>
@@ -194,11 +217,14 @@
             to your study, and the application of machine learning models for data classification.
         </p>
         <p class="mb-4">
-            We will proceed step by step, starting with the crucial preprocessing of your EEG data. When you're 
-            ready to begin, please click the button below to initiate the preprocessing stage.
+            We will proceed step by step, starting with the data information then with the crucial preprocessing of your EEG data. When you're 
+            ready to begin, please click the button below to initiate the data info stage.
         </p>
 
         <div class="text-center" style="margin-top: 2rem; margin-left: auto; margin-right: auto; width: fit-content;">
+            <button id="dataInfoButton" class="btn btn-outline-primary my-2 mr-2" onclick="toggleDataInfo()" style="font-size: medium; padding: 10px 20px; border-radius: 5px;">Data Info</button>
+            <div id="dataInfoContainer" class="alert alert-info" style="display: none;"></div>
+
             <button id="toggleButton" class="btn btn-primary my-2 mr-2" onclick="toggleStepsContainer()">View Process Data</button>
             <!-- Spinner element (hidden by default) -->
         <div id="loadingSpinner" class="text-center" style="display: none;">
@@ -311,6 +337,71 @@
         </div>
 
 <script>
+
+let dataFetched = false;
+
+function toggleDataInfo() {
+    const button = document.getElementById('dataInfoButton');
+    const container = document.getElementById('dataInfoContainer');
+    
+    if (container.style.display === 'none' || container.innerHTML.trim() === '') {
+        if (!dataFetched) {
+            fetchDataInfo();
+        } else {
+            container.style.display = 'block';
+            button.innerText = 'Hide Data Info';
+        }
+    } else {
+        container.style.display = 'none';
+        button.innerText = 'View Data Info';
+    }
+}
+
+function fetchDataInfo() {
+    document.getElementById('loadingSpinner').style.display = 'block';  // Show spinner while loading
+    fetch('/mat_data_info', {
+        method: 'POST'  // Adjust based on your backend requirements
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('loadingSpinner').style.display = 'none';  // Hide spinner after loading
+        const dataInfoContainer = document.getElementById('dataInfoContainer');
+        if (data.data_info && data.data_info.length > 0) {
+            // Data organization by session
+            const sessionInfoMap = {};
+            data.data_info.forEach(info => {
+                const parts = info.split(':');
+                const identifier = parts.shift().trim();
+                const detail = parts.join(':').trim();
+                if (!sessionInfoMap[identifier]) {
+                    sessionInfoMap[identifier] = [];
+                }
+                sessionInfoMap[identifier].push(detail);
+            });
+
+            // Building the table with grouped session info
+            let tableHTML = '<strong>Data Info:</strong><table class="table"><thead><tr><th>Subject Session</th><th>Info</th></tr></thead><tbody>';
+            for (const [identifier, details] of Object.entries(sessionInfoMap)) {
+                tableHTML += `<tr><td>${identifier}</td><td>${details.join('<br>')}</td></tr>`;
+            }
+            tableHTML += '</tbody></table>';
+            dataInfoContainer.innerHTML = tableHTML;
+            dataInfoContainer.style.display = 'block';  // Make the container visible
+            dataFetched = true;  // Update flag to indicate data has been fetched
+        } else {
+            dataInfoContainer.innerHTML = 'No data info available.';
+            dataInfoContainer.style.display = 'block';
+        }
+    })
+    .catch(error => {
+        console.error('Error fetching data info:', error);
+        document.getElementById('loadingSpinner').style.display = 'none';
+        const dataInfoContainer = document.getElementById('dataInfoContainer');
+        dataInfoContainer.innerHTML = 'Failed to fetch data info';
+        dataInfoContainer.style.display = 'block';
+    });
+}
+
 
     // JavaScript code to handle the "Get Highest Accuracy" button click
 document.getElementById('getHighestAccuracyButton').addEventListener('click', function() {

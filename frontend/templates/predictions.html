@@ -31,7 +31,7 @@
     <link href="/static/css/style.css" rel="stylesheet">
     <style>
         html, body {
-            height: 100%;
+            height: 110%;
             margin: 0;
         }
 
@@ -196,6 +196,29 @@
             width: 100%;
             height: 80px;
         }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        #detailedMessagesContainer {
+            background: #f8f9fa; /* A light grey background */
+            padding: 5px;
+            width: 50%;
+            margin-left: auto;
+            margin-right: auto;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* A subtle shadow for depth */
+            border-left: 4px solid #007bff; /* A blue left border */
+            margin-bottom: 20px; /* Spacing below the container */
+            animation: slideIn 1.0s ease-out; /* Animation for the message box */
+            font-weight: bold; /* Make text bold */
+        }
              
 
     </style>
@@ -230,7 +253,7 @@
     <!-- Navbar Start -->
     <nav class="navbar navbar-expand-lg bg-white navbar-light shadow-sm px-5 py-3 py-lg-0" style="width: 100%;">
         <a href="index.html" class="navbar-brand p-0">
-            <h1 class="m-0 text-primary"><i class="fa fa-tooth me-2"></i>EEG Hub</h1>
+            <h1 class="m-0 text-primary"><i class="fa fa-brain me-2"></i>EEG Hub</h1>
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse">
             <span class="navbar-toggler-icon"></span>
@@ -254,8 +277,9 @@
     
         <div class="btn-group" role="group" aria-label="Prediction Options">
             <button type="button" class="btn btn-outline-primary" id="optionNewDataset">Option 1: Predict with a new dataset</button>
-            <button type="button" class="btn btn-outline-secondary" id="predictOnTrainingData">Option 2: Predict on the training dataset</button>
+            <button type="button" class="btn btn-outline-secondary" id="predictOnTrainingData">Option 2: Predict on the testing dataset</button>
         </div>
+        <div id="detailedMessagesContainer" style="display: none;"></div>
      
             <div id="newDatasetForm"  style="margin-top: 2rem; display: none;width: 20%; margin-left: auto; margin-right: auto;"> <!-- w-50 sets the width to 50% of the parent -->
                 <form action="/predictions" method="POST" enctype="multipart/form-data" class="border p-4 shadow rounded bg-white">
@@ -346,6 +370,8 @@
     // Hide any alert messages
     document.getElementById('alertBox').style.display = 'none';
 
+    document.getElementById('detailedMessagesContainer').style.display = 'none';
+
     // Clear any existing predictions content
     var predictionsDisplay = document.getElementById('predictionsDisplay');
     if (predictionsDisplay) {
@@ -375,6 +401,7 @@ document.getElementById('predictOnTrainingData').addEventListener('click', funct
         .then(data => {
             console.log('Received data:', data); // Log the data to console
             if (data.status === 'success') {
+                displayDetailedMessages(data.detailed_messages); // Display detailed messages
                 preparePredictionOptions(data.formatted_predictions_train.length);
                 sessionStorage.setItem('predictionsData', JSON.stringify(data)); // Store data in sessionStorage
             } else {
@@ -386,6 +413,42 @@ document.getElementById('predictOnTrainingData').addEventListener('click', funct
             displayError(error);
         });
     });
+
+    function displayDetailedMessages(messages) {
+    const messagesContainer = document.getElementById('detailedMessagesContainer');
+    messagesContainer.innerHTML = ''; // Clear previous messages
+    messagesContainer.style.display='block';
+
+    messages.forEach(message => {
+        if (message.startsWith("Class Distribution in Training Data:")) {
+            try {
+                // Convert Python dictionary format to JSON
+                const distributionText = message.replace("Class Distribution in Training Data:", "").trim();
+                const jsonText = distributionText.replace(/'/g, '"');
+                const distributionData = JSON.parse(jsonText);
+
+                const distributionContainer = document.createElement('div');
+                distributionContainer.textContent = 'Class Distribution in Training Data:';
+                messagesContainer.appendChild(distributionContainer);
+
+                Object.entries(distributionData).forEach(([key, value]) => {
+                    const classInfo = document.createElement('p');
+                    classInfo.textContent = `${key}: ${value}`;
+                    messagesContainer.appendChild(classInfo);
+                });
+            } catch (e) {
+                console.error("Error parsing JSON:", e);
+                const errorParagraph = document.createElement('p');
+                errorParagraph.textContent = "Error displaying class distribution data.";
+                messagesContainer.appendChild(errorParagraph);
+            }
+        } else {
+            const messageParagraph = document.createElement('p');
+            messageParagraph.textContent = message;
+            messagesContainer.appendChild(messageParagraph);
+        }
+    });
+}
 
         
     </script>
@@ -469,11 +532,18 @@ document.getElementById('predictOnTrainingData').addEventListener('click', funct
         listItem.textContent = data.formatted_predictions_train[i].split(' - ')[0];
 
         var statusIcon = document.createElement('i');
-        if (data.formatted_predictions_train[i].includes('Correct')) {
+        if (data.formatted_predictions_train[i].includes('True Positive')) {
             statusIcon.className = 'fas fa-check-circle text-success';
-        } else {
-            statusIcon.className = 'fas fa-times-circle text-danger';
-        }
+        } 
+        if (data.formatted_predictions_train[i].includes('True Negative')) {
+            statusIcon.className = 'fas fa-check-circle text-info';
+        } 
+        if (data.formatted_predictions_train[i].includes('False Positive')) {
+            statusIcon.className = 'fas fa-check-circle text-warning';
+        } 
+        if (data.formatted_predictions_train[i].includes('False Negative')) {
+            statusIcon.className = 'fas fa-check-circle text-danger';
+        } 
 
         listItem.appendChild(statusIcon);
         listGroup.appendChild(listItem);

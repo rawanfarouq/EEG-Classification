@@ -1,55 +1,47 @@
 import pandas as pd 
 import numpy as np
 import matplotlib.pyplot as plt
-import sys
-import glob
-import tkinter as tk
-from tkinter import filedialog 
-from tkinter import messagebox as msg 
-import pyedflib
 import mne
 import scipy
-from scipy.fft import fft
 from scipy import stats
+from scipy.fft import fft
+from scipy.signal import butter, sosfiltfilt
 import os
 import threading
-import queue
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from statsmodels.tsa.ar_model import AutoReg
-from scipy.signal import butter, sosfiltfilt
 from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier
 
 def loadData(fileName):
 
-    if fileName.endswith('mat'):
+    if fileName.endswith("mat"):
         try:
             mat = scipy.io.loadmat(fileName)
-            eegData = mat['data']
-            label = mat['labels']
+            eegData = mat["data"]
+            label = mat["labels"]
             return eegData, label
         except ImportError:
-            print('Library Error', 'scipy is required to load MAT data.')
+            print("Library Error", "scipy is required to load MAT data.")
             return None
         except Exception as e:
-            print('Error', f'Error in loading mat file: {str(e)}')
+            print("Error", f"Error in loading mat file: {str(e)}")
             return None
         
     else:
-        print('Wrong file type')
+        print("Wrong file type")
 
 def use_csp(eegData, labels):
     n_samples, n_channels, n_trials = eegData.shape
     eegData = np.concatenate(eegData, axis = 1)
     eegData_reshaped = eegData.reshape(n_channels, n_samples * n_trials)
 
-    ch_names = [f'ch{i+1}' for i in range(n_channels)] 
-    info = mne.create_info(ch_names=ch_names, sfreq=250, ch_types='eeg')
+    ch_names = [f"ch{i+1}" for i in range(n_channels)] 
+    info = mne.create_info(ch_names=ch_names, sfreq=250, ch_types="eeg")
     raw = mne.io.RawArray(eegData_reshaped, info)
 
-    epochs = mne.make_fixed_length_epochs(raw, duration=1.0, preload=True, reject_by_annotation=False)
+    epochs = mne.make_fixed_length_epochs(raw, duration=1.0, preload=True, 
+                                          reject_by_annotation=False)
     epochs_data = epochs.get_data()
 
     labels = labels.flatten()
@@ -83,12 +75,12 @@ def stat(channeldata, L, channel, headers, sample):
                 power_val, peak_val, p2p_val, crest_factor_val, skew_val,
                 kurtosis_val])
     if sample == 0:
-        headers.extend([f'Channel_{channel+1}_min', f'Channel_{channel+1}_max',
-                    f'Channel_{channel+1}_mean', f'Channel_{channel+1}_std',
-                    f'Channel_{channel+1}_rms', f'Channel_{channel+1}_var',
-                    f'Channel_{channel+1}_power', f'Channel_{channel+1}_peak',
-                    f'Channel_{channel+1}_p2p', f'Channel_{channel+1}_crestfactor',
-                    f'Channel_{channel+1}_skew', f'Channel_{channel+1}_kurtosis'])
+        headers.extend([f"Channel_{channel+1}_min", f"Channel_{channel+1}_max",
+                    f"Channel_{channel+1}_mean", f"Channel_{channel+1}_std",
+                    f"Channel_{channel+1}_rms", f"Channel_{channel+1}_var",
+                    f"Channel_{channel+1}_power", f"Channel_{channel+1}_peak",
+                    f"Channel_{channel+1}_p2p", f"Channel_{channel+1}_crestfactor",
+                    f"Channel_{channel+1}_skew", f"Channel_{channel+1}_kurtosis"])
     return L, headers
 
 def ar(channeldata, L, channel, headers, sample):
@@ -100,18 +92,18 @@ def ar(channeldata, L, channel, headers, sample):
     L.extend(ar_coeffs.tolist())
     if sample == 0:
         for lag in range(1, 4):
-            headers.append(f'Channel_{channel+1}_ar{lag}')
+            headers.append(f"Channel_{channel+1}_ar{lag}")
 
     return L, headers
 
-def fft_features(channeldata, L, channel, headers, sample):
+def fourier(channeldata, L, channel, headers, sample):
     fft_val = fft(channeldata)
 
     mean_fft = np.mean(np.abs(fft_val))
 
     L.extend([mean_fft])
     if sample == 0:
-        headers.extend([f'Channel_{channel+1}_fft']) 
+        headers.extend([f"Channel_{channel+1}_fft"]) 
 
     return L, headers
 
@@ -123,7 +115,7 @@ def psd(channeldata, L, channel, headers, sample):
 
     L.extend([mean_psd])
     if sample == 0:
-        headers.extend([f'Channel_{channel+1}_psd']) 
+        headers.extend([f"Channel_{channel+1}_psd"]) 
 
     return L, headers
 
@@ -135,12 +127,12 @@ def fdjt(channeldata, L, channel, headers, sample):
 
     L.extend([mean_fdjt])
     if sample == 0:
-        headers.extend([f'Channel_{channel+1}_fdjt']) 
+        headers.extend([f"Channel_{channel+1}_fdjt"]) 
 
     return L, headers
 
 def features(eegData, labels):
-    method = 'fft'
+    method = "fft"
     FS = []
     headers = []
     samples = eegData[:,0,0]
@@ -151,20 +143,20 @@ def features(eegData, labels):
         for channel in range(channels.size):
             channeldata = si[channel,:]
 
-            if method == 'stat':
+            if method == "stat":
                 L, headers = stat(channeldata, L, channel, headers, sample)
-            elif method == 'ar':
+            elif method == "ar":
                 L, headers = ar(channeldata, L, channel, headers, sample)
-            elif method == 'fft':
-                L, headers = fft_features(channeldata, L, channel, headers, sample)
-            elif method == 'psd':
+            elif method == "fft":
+                L, headers = fourier(channeldata, L, channel, headers, sample)
+            elif method == "psd":
                 L, headers = psd(channeldata, L, channel, headers, sample)
-            elif method == 'fdjt':
+            elif method == "fdjt":
                 L, headers = fdjt(channeldata, L, channel, headers, sample)
 
         L.append(labels[0,sample])
         FS.append(L)
-    headers.append('Label')
+    headers.append("Label")
     return FS, headers
 
 csvpaths = []
@@ -174,7 +166,6 @@ def allfeatures(FS, headers, csv_path):
     current_dir = os.path.dirname(os.path.realpath(__file__))
     csvpath = os.path.join(current_dir, csv_path)
     dffeatures.to_csv(csvpath, index=False)
-    print(csvpath, " done")
     csvpaths.append(csvpath)
     return csvpath
 
@@ -187,7 +178,7 @@ def filtering(data, fs, lowcut, highcut, order=5):
     nyquist = 0.5 * fs
     low = lowcut / nyquist
     high = highcut / nyquist
-    sos = butter(order, [low, high], analog=False, btype='band', output='sos')
+    sos = butter(order, [low, high], analog=False, btype="band", output="sos")
     
     samples, channels, trials = data.shape
     data_2d = np.reshape(data, (channels, samples * trials))
@@ -199,7 +190,6 @@ def filtering(data, fs, lowcut, highcut, order=5):
     return filtered_data
 
 def extract_freq(band_idx, lowcut, highcut, eegData, labels):
-    print('freq', band_idx, 'start')
     if band_idx == 0:
         filtered_data = eegData
     else:
@@ -215,19 +205,20 @@ def extract_features(file_paths):
         eegData, labels = loadData(path)
         for band_idx, (lowcut, highcut) in enumerate(subbands, start=0):
             filtereddata = use_csp(eegData, labels)
-            name = 'freqthread_', band_idx, path
-            name = threading.Thread(target=extract_freq, args=(band_idx, lowcut, highcut, filtereddata, labels))
+            name = "freqthread_", band_idx, path
+            name = threading.Thread(target=extract_freq, 
+                                    args=(band_idx, lowcut, highcut, filtereddata, labels))
             name.start()
             threads.append(name)
         for thread in threads:
             thread.join()
 
     for band_idx in range(len(subbands)):
-        csv_path = f'subband_{band_idx}_features.csv'
+        csv_path = f"subband_{band_idx}_features.csv"
         allfeatures(subfeatures[band_idx], subheaders[band_idx], csv_path)
 
     for index in range(0,6):
-        name = 'thread_', index
+        name = "thread_", index
         name = threading.Thread(target=classificationrf, args=(index,))
         name.start()
         threads.append(name)
@@ -241,39 +232,22 @@ def extract_features(file_paths):
         if best[i]>max:
             max = best[i]
             bestpath = csvpaths[i]
-    print("Most accurate was the value", max, "% for", bestpath)
     return bestpath
 
-def classificationsvm(index):
-    print('start', index)
-    df = pd.read_csv(csvpaths[index])
-
-    X = df.drop(columns=['Label']) 
-    y = df['Label']
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    svm_classifier = SVC(kernel='linear') 
-    svm_classifier.fit(X_train, y_train)
-
-    y_pred = svm_classifier.predict(X_test)
-    best[index] = accuracy_score(y_test, y_pred) * 100
-    print("Accuracy of " , csvpaths[index], " :", best[index])
-
 def classificationrf(index):
-    print('start', index)
     df = pd.read_csv(csvpaths[index])
 
-    X = df.drop(columns=['Label']) 
-    y = df['Label']
+    X = df.drop(columns=["Label"]) 
+    y = df["Label"]
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, 
+                                        y, test_size=0.2, random_state=42)
     
     rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
     rf_classifier.fit(X_train, y_train)
 
     y_pred = rf_classifier.predict(X_test)
     best[index] = accuracy_score(y_test, y_pred) * 100
-    print("Accuracy of ", csvpaths[index], " :", best[index])
 
 def main():
     paths = ["D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-01_task_motorimagery_eeg.mat", 

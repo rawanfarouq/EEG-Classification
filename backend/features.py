@@ -42,24 +42,33 @@ def loadData(fileName):
 
 def use_csp(eegData, labels):
     print('csp started')
-    n_channels, n_samples, n_trials = eegData.shape
-    eegData = eegData.transpose(1, 0, 2).reshape(n_samples, n_channels * n_trials)
+    n_samples, n_channels, n_trials = eegData.shape
+    eegData = np.concatenate(eegData, axis = 1)
+    eegData_reshaped = eegData.reshape(n_channels, n_samples * n_trials)
 
     ch_names = [f'ch{i+1}' for i in range(n_channels)] 
-    info = mne.create_info(ch_names=ch_names, sfreq=1000, ch_types='eeg')
-    raw = mne.io.RawArray(eegData, info)
+    info = mne.create_info(ch_names=ch_names, sfreq=250, ch_types='eeg')
+    raw = mne.io.RawArray(eegData_reshaped, info)
     
-    raw.notch_filter(60, picks='eeg')  # Remove powerline noise
+    #raw.notch_filter(60, picks='eeg')
 
-    events = np.array([[i, 0, label] for i, label in enumerate(labels)])
-    epochs = mne.Epochs(raw, events, tmin=0, tmax=raw.times[-1], baseline=None, detrend=1, preload=True)
-    epochs = epochs.pick_types(eeg=True)
-    epochs_train = epochs.copy().crop(tmin=0, tmax=0.5)
-    csp = mne.decoding.CSP(n_components=4)
-    csp.fit(epochs_train)
-    filtereddata = csp.transform(epochs.get_data())
-    print('ended')
-    return filtereddata
+    epochs = mne.make_fixed_length_epochs(raw, duration=1.0, preload=True, reject_by_annotation=False)
+    epochs_data = epochs.get_data()
+
+    labels = labels.flatten()
+    
+    min_len = min(len(epochs_data), len(labels))
+    epochs_data = epochs_data[:min_len]
+    labels = labels[:min_len]
+
+    csp = mne.decoding.CSP(n_components=4, reg=None, log=True, norm_trace=False)
+    csp.fit(epochs_data, labels)
+    filtered_data = csp.transform(epochs_data)
+
+    #filtered_data = np.reshape(filtered_data, (n_samples, n_channels, n_trials))
+    
+    print('CSP ended')
+    return filtered_data
 
 def stat(channeldata, L, channel, headers, sample):
     min_val = np.min(channeldata)
@@ -186,7 +195,7 @@ def filtering(data, fs, lowcut, highcut, order=5):
     sos = butter(order, [low, high], analog=False, btype='band', output='sos')
     
     samples, channels, trials = data.shape
-    data_2d = np.reshape(data, (samples * channels, trials))
+    data_2d = np.reshape(data, (channels, samples * trials))
 
     filtered_data_2d = sosfiltfilt(sos, data_2d, axis=-1)
 
@@ -210,6 +219,7 @@ def extract_features(file_paths):
     for path in file_paths:
         eegData, labels = loadData(path)
         for band_idx, (lowcut, highcut) in enumerate(subbands, start=0):
+            #filtereddata = use_csp(eegData, labels)
             name = 'freqthread_', band_idx, path
             name = threading.Thread(target=extract_freq, args=(band_idx, lowcut, highcut, eegData, labels))
             name.start()
@@ -236,7 +246,7 @@ def extract_features(file_paths):
         if best[i]>max:
             max = best[i]
             bestpath = csvpaths[i]
-    print(max, " for ", bestpath)
+    print("Most accurate was the value", max, "% for", bestpath)
     return bestpath
 
 def classificationsvm(index):
@@ -251,7 +261,7 @@ def classificationsvm(index):
     svm_classifier.fit(X_train, y_train)
 
     y_pred = svm_classifier.predict(X_test)
-    best[index] = accuracy_score(y_test, y_pred)
+    best[index] = accuracy_score(y_test, y_pred) * 100
     print("Accuracy of " , csvpaths[index], " :", best[index])
 
 def classificationrf(index):
@@ -267,5 +277,15 @@ def classificationrf(index):
     rf_classifier.fit(X_train, y_train)
 
     y_pred = rf_classifier.predict(X_test)
-    best[index] = accuracy_score(y_test, y_pred)
+    best[index] = accuracy_score(y_test, y_pred) * 100
     print("Accuracy of ", csvpaths[index], " :", best[index])
+
+def main():
+    paths = ["D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-01_task_motorimagery_eeg.mat", 
+             "D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-02_task_motorimagery_eeg.mat", 
+             "D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-03_task_motorimagery_eeg.mat", 
+             "D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-04_task_motorimagery_eeg.mat",
+             "D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-05_task_motorimagery_eeg.mat"]
+    extract_features(paths)
+if __name__ == "__main__":
+    main()

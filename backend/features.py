@@ -41,7 +41,6 @@ def loadData(fileName):
         print('Wrong file type')
 
 def use_csp(eegData, labels):
-    print('csp started')
     n_samples, n_channels, n_trials = eegData.shape
     eegData = np.concatenate(eegData, axis = 1)
     eegData_reshaped = eegData.reshape(n_channels, n_samples * n_trials)
@@ -49,8 +48,6 @@ def use_csp(eegData, labels):
     ch_names = [f'ch{i+1}' for i in range(n_channels)] 
     info = mne.create_info(ch_names=ch_names, sfreq=250, ch_types='eeg')
     raw = mne.io.RawArray(eegData_reshaped, info)
-    
-    #raw.notch_filter(60, picks='eeg')
 
     epochs = mne.make_fixed_length_epochs(raw, duration=1.0, preload=True, reject_by_annotation=False)
     epochs_data = epochs.get_data()
@@ -61,13 +58,11 @@ def use_csp(eegData, labels):
     epochs_data = epochs_data[:min_len]
     labels = labels[:min_len]
 
-    csp = mne.decoding.CSP(n_components=4, reg=None, log=True, norm_trace=False)
+    csp = mne.decoding.CSP(n_components=32, reg=None, log=True, norm_trace=False)
     csp.fit(epochs_data, labels)
     filtered_data = csp.transform(epochs_data)
+    filtered_data = np.reshape(filtered_data, (n_samples, 32, 1))
 
-    #filtered_data = np.reshape(filtered_data, (n_samples, n_channels, n_trials))
-    
-    print('CSP ended')
     return filtered_data
 
 def stat(channeldata, L, channel, headers, sample):
@@ -219,9 +214,9 @@ def extract_features(file_paths):
     for path in file_paths:
         eegData, labels = loadData(path)
         for band_idx, (lowcut, highcut) in enumerate(subbands, start=0):
-            #filtereddata = use_csp(eegData, labels)
+            filtereddata = use_csp(eegData, labels)
             name = 'freqthread_', band_idx, path
-            name = threading.Thread(target=extract_freq, args=(band_idx, lowcut, highcut, eegData, labels))
+            name = threading.Thread(target=extract_freq, args=(band_idx, lowcut, highcut, filtereddata, labels))
             name.start()
             threads.append(name)
         for thread in threads:

@@ -131,8 +131,7 @@ def fdjt(channeldata, L, channel, headers, sample):
 
     return L, headers
 
-def features(eegData, labels):
-    method = "fft"
+def features(eegData, labels, method):
     FS = []
     headers = []
     samples = eegData[:,0,0]
@@ -159,20 +158,28 @@ def features(eegData, labels):
     headers.append("Label")
     return FS, headers
 
-csvpaths = []
-def allfeatures(FS, headers, csv_path):
+def allfeatures(FS, headers, csv_path, method, csvpaths):
     dffeatures = pd.concat(FS, ignore_index=True)
     dffeatures.columns = headers
     current_dir = os.path.dirname(os.path.realpath(__file__))
+    if method == "stat":
+        current_dir = os.path.join(current_dir, "statistical")
+    elif method == "ar":
+        current_dir = os.path.join(current_dir, "autoregression")
+    elif method == "fft":
+        current_dir = os.path.join(current_dir, "fourier")
+    elif method == "psd":
+        current_dir = os.path.join(current_dir, "psd")
+    elif method == "fdjt":
+        current_dir = os.path.join(current_dir, "fdjt")
+    
+    os.makedirs(current_dir, exist_ok=True)
     csvpath = os.path.join(current_dir, csv_path)
     dffeatures.to_csv(csvpath, index=False)
     csvpaths.append(csvpath)
     return csvpath
 
 subbands = [(0, 100), (0.5, 4), (4, 8), (8, 12), (12, 30), (30, 100)]
-best = [0,0,0,0,0,0]
-subfeatures = [[] for _ in range(6)]
-subheaders = [[] for _ in range(6)]
 
 def filtering(data, fs, lowcut, highcut, order=5):
     nyquist = 0.5 * fs
@@ -189,25 +196,25 @@ def filtering(data, fs, lowcut, highcut, order=5):
     
     return filtered_data
 
-def extract_freq(band_idx, lowcut, highcut, eegData, labels):
+def extract_freq(band_idx, lowcut, highcut, eegData, labels, subfeatures, subheaders):
     if band_idx == 0:
         filtered_data = eegData
     else:
         filtered_data = filtering(eegData, fs=250, lowcut=lowcut, highcut=highcut)
-    subband_features, subband_headers = features(filtered_data, labels)
+    subband_features, subband_headers = features(filtered_data, labels, "fft")
     subfeatures[band_idx].append(pd.DataFrame(subband_features))
     subheaders[band_idx] = subband_headers
 
-def extract_features(file_paths):
+def extract_features(file_paths, method, best, subfeatures, subheaders, csvpaths):
     threads = []
-    
+    global max_value, bestpath
     for path in file_paths:
         eegData, labels = loadData(path)
         for band_idx, (lowcut, highcut) in enumerate(subbands, start=0):
             filtereddata = use_csp(eegData, labels)
             name = "freqthread_", band_idx, path
             name = threading.Thread(target=extract_freq, 
-                                    args=(band_idx, lowcut, highcut, filtereddata, labels))
+                                    args=(band_idx, lowcut, highcut, filtereddata, labels, subfeatures, subheaders))
             name.start()
             threads.append(name)
         for thread in threads:
@@ -215,28 +222,21 @@ def extract_features(file_paths):
 
     for band_idx in range(len(subbands)):
         csv_path = f"subband_{band_idx}_features.csv"
-        allfeatures(subfeatures[band_idx], subheaders[band_idx], csv_path)
+        allfeatures(subfeatures[band_idx], subheaders[band_idx], csv_path, method, csvpaths)
 
     for index in range(0,6):
         name = "thread_", index
-        name = threading.Thread(target=classificationrf, args=(index,))
+        name = threading.Thread(target=classificationrf, args=(index, best, csvpaths))
         name.start()
         threads.append(name)
 
     for thread in threads:
         thread.join()
 
-    max = best[0]
-    bestpath = csvpaths[0]
-    for i in range(1,6):
-        if best[i]>max:
-            max = best[i]
-            bestpath = csvpaths[i]
-    return bestpath
+def classificationrf(index, best, csvpaths):
+    global max_value, bestpath
 
-def classificationrf(index):
     df = pd.read_csv(csvpaths[index])
-
     X = df.drop(columns=["Label"]) 
     y = df["Label"]
 
@@ -248,13 +248,30 @@ def classificationrf(index):
 
     y_pred = rf_classifier.predict(X_test)
     best[index] = accuracy_score(y_test, y_pred) * 100
+    print("rf done", csvpaths[index], best[index])
+    if best[index] > max_value:
+            max_value = best[index]
+            bestpath = csvpaths[index]
 
+def compare_methods(paths):
+
+    methods = ["stat", "ar", "fft", "psd", "fdjt"]
+    for method in methods:
+        best = [0,0,0,0,0,0]
+        csvpaths = []
+        subfeatures = [[] for _ in range(6)]
+        subheaders = [[] for _ in range(6)]
+        extract_features(paths, method, best, subfeatures, subheaders, csvpaths)
+        print(max_value, "% :", bestpath)
+    pass
+max_value = 0
+bestpath = ""
 def main():
     paths = ["D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-01_task_motorimagery_eeg.mat", 
              "D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-02_task_motorimagery_eeg.mat", 
              "D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-03_task_motorimagery_eeg.mat", 
              "D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-04_task_motorimagery_eeg.mat",
              "D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-05_task_motorimagery_eeg.mat"]
-    extract_features(paths)
+    compare_methods(paths)
 if __name__ == "__main__":
     main()

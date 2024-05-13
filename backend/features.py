@@ -13,6 +13,25 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier
 
+def plot_channels(eegData, path):
+    file_name = os.path.dirname(os.path.realpath(__file__))
+    output_dir = os.path.join(file_name, "plots")
+    os.makedirs(output_dir, exist_ok=True)
+    for channel in range(eegData.shape[1]):
+        plt.figure(figsize=(10, 5))
+        plt.plot(eegData[:, channel, :])
+        plt.title(f"Channel {channel+1}")
+        plt.xlabel("Time")
+        plt.ylabel("Amplitude")
+        file_name = os.path.basename(path)
+        file_name = os.path.splitext(file_name)[0]
+        os.path.join(file_name, "backend")
+        os.path.join(file_name, "plots")
+        os.makedirs(file_name, exist_ok=True)
+        plot_file_path = os.path.join(output_dir, f"plot_{file_name}_channel{channel+1}.png")
+        plt.savefig(plot_file_path)
+        plt.close()
+
 def loadData(fileName):
 
     if fileName.endswith("mat"):
@@ -196,25 +215,23 @@ def filtering(data, fs, lowcut, highcut, order=5):
     
     return filtered_data
 
-def extract_freq(band_idx, lowcut, highcut, eegData, labels, subfeatures, subheaders):
+def extract_freq(band_idx, lowcut, highcut, eegData, labels, subfeatures, subheaders, method):
     if band_idx == 0:
         filtered_data = eegData
     else:
         filtered_data = filtering(eegData, fs=250, lowcut=lowcut, highcut=highcut)
-    subband_features, subband_headers = features(filtered_data, labels, "fft")
+    subband_features, subband_headers = features(filtered_data, labels, method)
     subfeatures[band_idx].append(pd.DataFrame(subband_features))
     subheaders[band_idx] = subband_headers
 
 def extract_features(file_paths, method, best, subfeatures, subheaders, csvpaths):
     threads = []
-    global max_value, bestpath
-    for path in file_paths:
-        eegData, labels = loadData(path)
+    global max_value, bestpath, loadeddata, loadedlabels
+    for index in range(len(file_paths)):
         for band_idx, (lowcut, highcut) in enumerate(subbands, start=0):
-            filtereddata = use_csp(eegData, labels)
-            name = "freqthread_", band_idx, path
+            name = "freqthread_", band_idx, file_paths[index]
             name = threading.Thread(target=extract_freq, 
-                                    args=(band_idx, lowcut, highcut, filtereddata, labels, subfeatures, subheaders))
+                    args=(band_idx, lowcut, highcut, loadeddata[index], loadedlabels[index], subfeatures, subheaders, method))
             name.start()
             threads.append(name)
         for thread in threads:
@@ -254,8 +271,15 @@ def classificationrf(index, best, csvpaths):
             bestpath = csvpaths[index]
 
 def compare_methods(paths):
-
-    methods = ["stat", "ar", "fft", "psd", "fdjt"]
+    global loadeddata, loadedlabels
+    for index in range(len(paths)):
+        path = paths[index]
+        eegData, labels = loadData(path)
+        filtereddata = use_csp(eegData, labels)
+        loadeddata.append(filtereddata)
+        loadedlabels.append(labels)
+        #plot_channels(eegData, path)
+    methods = ["ar", "fft", "psd", "fdjt", "stat"]
     for method in methods:
         best = [0,0,0,0,0,0]
         csvpaths = []
@@ -263,15 +287,16 @@ def compare_methods(paths):
         subheaders = [[] for _ in range(6)]
         extract_features(paths, method, best, subfeatures, subheaders, csvpaths)
         print(max_value, "% :", bestpath)
-    pass
 max_value = 0
 bestpath = ""
+loadeddata = []
+loadedlabels = []
 def main():
-    paths = ["D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-01_task_motorimagery_eeg.mat", 
-             "D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-02_task_motorimagery_eeg.mat", 
-             "D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-03_task_motorimagery_eeg.mat", 
-             "D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-04_task_motorimagery_eeg.mat",
-             "D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-05_task_motorimagery_eeg.mat"]
+    paths = [r"D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-01_task_motorimagery_eeg.mat", 
+             r"D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-02_task_motorimagery_eeg.mat", 
+             r"D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-03_task_motorimagery_eeg.mat", 
+             r"D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-04_task_motorimagery_eeg.mat",
+             r"D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-05_task_motorimagery_eeg.mat"]
     compare_methods(paths)
 if __name__ == "__main__":
     main()

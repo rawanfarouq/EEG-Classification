@@ -9,7 +9,9 @@ The project utilizes advanced preprocessing approaches and robust feature extrac
 Features
 
 1.Preprocessing and feature extraction using Common Spatial Patterns and statistical analysis
+
 2.Machine learning models for EEG signal classification
+
 3.Flask-based web platform for data visualization and user interaction
 
 Usage

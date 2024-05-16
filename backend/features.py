@@ -13,6 +13,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier
 
+subbands = [(0, 100), (0.5, 4), (4, 8), (8, 12), (12, 30), (30, 100)]
+max_value = 0
+bestpath = ""
+loadeddata = []
+loadedlabels = []
+
 def plot_channels(eegData, path):
     output_dir = os.path.join("frontend", "static", "plots")
     os.makedirs(output_dir, exist_ok=True)
@@ -58,8 +64,7 @@ def use_csp(eegData, labels):
     info = mne.create_info(ch_names=ch_names, sfreq=250, ch_types="eeg")
     raw = mne.io.RawArray(eegData_reshaped, info)
 
-    epochs = mne.make_fixed_length_epochs(raw, duration=1.0, preload=True, 
-                                          reject_by_annotation=False)
+    epochs = mne.make_fixed_length_epochs(raw, duration=1.0, preload=True, reject_by_annotation=False)
     epochs_data = epochs.get_data()
 
     labels = labels.flatten()
@@ -90,8 +95,7 @@ def stat(channeldata, L, channel, headers, sample):
     kurtosis_val = stats.kurtosis(channeldata)
 
     L.extend([min_val, max_val, mean_val, std_val, rms_val, var_val,
-                power_val, peak_val, p2p_val, crest_factor_val, skew_val,
-                kurtosis_val])
+            power_val, peak_val, p2p_val, crest_factor_val, skew_val, kurtosis_val])
     if sample == 0:
         headers.extend([f"Channel_{channel+1}_min", f"Channel_{channel+1}_max",
                     f"Channel_{channel+1}_mean", f"Channel_{channel+1}_std",
@@ -197,8 +201,6 @@ def allfeatures(FS, headers, csv_path, method, csvpaths):
     csvpaths.append(csvpath)
     return csvpath
 
-subbands = [(0, 100), (0.5, 4), (4, 8), (8, 12), (12, 30), (30, 100)]
-
 def filtering(data, fs, lowcut, highcut, order=5):
     nyquist = 0.5 * fs
     low = lowcut / nyquist
@@ -228,9 +230,8 @@ def extract_features(file_paths, method, best, subfeatures, subheaders, csvpaths
     global max_value, bestpath, loadeddata, loadedlabels
     for index in range(len(file_paths)):
         for band_idx, (lowcut, highcut) in enumerate(subbands, start=0):
-            name = "freqthread_", band_idx, file_paths[index]
-            name = threading.Thread(target=extract_freq, 
-                    args=(band_idx, lowcut, highcut, loadeddata[index], loadedlabels[index], subfeatures, subheaders, method))
+            name = f"freqthread_{band_idx}_{file_paths[index]}"
+            name = threading.Thread(target=extract_freq, args=(band_idx, lowcut, highcut, loadeddata[index], loadedlabels[index], subfeatures, subheaders, method))
             name.start()
             threads.append(name)
         for thread in threads:
@@ -241,7 +242,7 @@ def extract_features(file_paths, method, best, subfeatures, subheaders, csvpaths
         allfeatures(subfeatures[band_idx], subheaders[band_idx], csv_path, method, csvpaths)
 
     for index in range(0,6):
-        name = "thread_", index
+        name = f"thread_{index}"
         name = threading.Thread(target=classificationrf, args=(index, best, csvpaths))
         name.start()
         threads.append(name)
@@ -256,8 +257,7 @@ def classificationrf(index, best, csvpaths):
     X = df.drop(columns=["Label"]) 
     y = df["Label"]
 
-    X_train, X_test, y_train, y_test = train_test_split(X, 
-                                        y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
     rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
     rf_classifier.fit(X_train, y_train)
@@ -277,7 +277,7 @@ def compare_methods(paths):
         filtereddata = use_csp(eegData, labels)
         loadeddata.append(filtereddata)
         loadedlabels.append(labels)
-        #plot_channels(eegData, path)
+        plot_channels(eegData, path)
     methods = ["ar", "fft", "psd", "fdjt", "stat"]
     for method in methods:
         best = [0,0,0,0,0,0]
@@ -286,10 +286,7 @@ def compare_methods(paths):
         subheaders = [[] for _ in range(6)]
         extract_features(paths, method, best, subfeatures, subheaders, csvpaths)
         print(max_value, "% :", bestpath)
-max_value = 0
-bestpath = ""
-loadeddata = []
-loadedlabels = []
+
 def main():
     paths = [r"D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-01_task_motorimagery_eeg.mat", 
              r"D:\GUC\Bachelor\Datasets\CrossSessionVariability\mat\subject1\sub-001_ses-02_task_motorimagery_eeg.mat", 

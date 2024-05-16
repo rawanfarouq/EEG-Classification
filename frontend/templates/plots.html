@@ -113,43 +113,12 @@
                 <div class="mb-3">
                     <label for="channelSelect" class="form-label">Select Channel:</label>
                     <select class="form-select" id="channelSelect">
-                        <option value="plot1">Channel 1</option>
-                        <option value="plot2">Channel 2</option>
-                        <option value="plot3">Channel 3</option>
-                        <option value="plot4">Channel 4</option>
-                        <option value="plot5">Channel 5</option>
-                        <option value="plot6">Channel 6</option>
-                        <option value="plot7">Channel 7</option>
-                        <option value="plot8">Channel 8</option>
-                        <option value="plot9">Channel 9</option>
-                        <option value="plot10">Channel 10</option>
-                        <option value="plot11">Channel 11</option>
-                        <option value="plot12">Channel 12</option>
-                        <option value="plot13">Channel 13</option>
-                        <option value="plot14">Channel 14</option>
-                        <option value="plot15">Channel 15</option>
-                        <option value="plot16">Channel 16</option>
-                        <option value="plot17">Channel 17</option>
-                        <option value="plot18">Channel 18</option>
-                        <option value="plot19">Channel 19</option>
-                        <option value="plot20">Channel 20</option>
-                        <option value="plot21">Channel 21</option>
-                        <option value="plot22">Channel 22</option>
-                        <option value="plot23">Channel 23</option>
-                        <option value="plot24">Channel 24</option>
-                        <option value="plot25">Channel 25</option>
-                        <option value="plot26">Channel 26</option>
-                        <option value="plot27">Channel 27</option>
-                        <option value="plot28">Channel 28</option>
-                        <option value="plot29">Channel 29</option>
-                        <option value="plot30">Channel 30</option>
-                        <option value="plot31">Channel 31</option>
-                        <option value="plot32">Channel 32</option>
+                        <!-- Dropdown options will be dynamically added here -->
                     </select>
                 </div>
                 <!-- Plot Container -->
-                <div id="plotContainer" class="plot-container">
-                    <!-- Plot will be dynamically loaded here -->
+                <div class="plot-container">
+                    <img id="plotImage" class="plot-image" src="" alt="Selected Plot">
                 </div>
             </div>
         </div>
@@ -163,26 +132,55 @@
     <!-- Include JavaScript libraries -->
 
     <!-- Custom JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+
+    <!-- Custom JavaScript -->
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
+        $(document).ready(function() {
             // Function to fetch and display plot based on selected channel
-            function displayPlot(channel) {
-                // You can use AJAX or fetch to dynamically load the plot based on the selected channel
-                // For demonstration purpose, I'm just updating the inner HTML of the plotContainer
-                var plotContainer = document.getElementById("plotContainer");
-                plotContainer.innerHTML = '<h2 class="text-center">Plot Title for ' + channel + '</h2>' +
-                    '<img src="/static/plots/' + channel + '.png" class="plot-image" alt="Plot for ' + channel + '">';
+            function displayPlot(filename) {
+                var imagePath = "static/plots/" + filename; // Update image path
+                console.log("Image src: " + imagePath);
+                $("#plotImage").attr("src", imagePath)
+                    .on("error", function() {
+                        $(this).attr("src", ""); // Clear image source on error
+                        console.error("Image not found:", imagePath);
+                        // You can display a message here to inform the user
+                    });
+            }
+
+            // Function to fetch image filenames from the server
+            function fetchImageFilenames() {
+                $.ajax({
+                    url: "/get_image_filenames",
+                    type: "GET",
+                    success: function(data) {
+                        // Populate the dropdown menu with image filenames
+                        var select = $("#channelSelect");
+                        $.each(data, function(index, filename) {
+                            select.append($("<option>").val(filename).text(filename));
+                        });
+
+                        // Display the first image by default if available
+                        if (data.length > 0) {
+                            var defaultFilename = data[0];
+                            displayPlot(defaultFilename);
+                        }
+                    },
+                    error: function(error) {
+                        console.error("Error fetching image filenames:", error);
+                    }
+                });
             }
 
             // Event listener for dropdown menu change
-            document.getElementById("channelSelect").addEventListener("change", function() {
-                var selectedChannel = this.value;
+            $("#channelSelect").change(function() {
+                var selectedChannel = $(this).val();
                 displayPlot(selectedChannel);
             });
 
-            // Initial display of the plot based on default selected channel
-            var defaultChannel = document.getElementById("channelSelect").value;
-            displayPlot(defaultChannel);
+            // Call the fetchImageFilenames function to populate the dropdown menu
+            fetchImageFilenames();
         });
     </script>
 </body>

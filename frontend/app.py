@@ -48,6 +48,12 @@ def upload():
 def plots():
      return render_template('plots.html')
 
+@app.route("/get_image_filenames")
+def get_image_filenames():
+    plots_folder = os.path.join(os.path.dirname(__file__), "static", "plots")
+    filenames = [filename for filename in os.listdir(plots_folder)]
+    return jsonify(filenames)
+
 @app.route('/choose')
 def choose():
      return render_template('choose.html')

@@ -14,8 +14,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier
 
 def plot_channels(eegData, path):
-    file_name = os.path.dirname(os.path.realpath(__file__))
-    output_dir = os.path.join(file_name, "plots")
+    output_dir = os.path.join("frontend", "static", "plots")
     os.makedirs(output_dir, exist_ok=True)
     for channel in range(eegData.shape[1]):
         plt.figure(figsize=(10, 5))

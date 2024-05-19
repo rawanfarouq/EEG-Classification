@@ -100,7 +100,7 @@
             text-decoration: underline; /* Underlines the text */
         }
         #preprocessingStepsContainer,
-            #featuresMessage {
+            #featuresMessage,#predictionMessage_train {
                 background: #f8f9fa; /* A light grey background */
                 padding: 25px;
                 border-radius: 5px;
@@ -130,6 +130,27 @@
 
         .wrong-icon {
             color: red;
+        }
+        .container-model
+        {
+            background: #f8f9fa; /* A light grey background */
+            padding: 5px;
+            width: 50%;
+            margin-left: auto;
+            margin-right: auto;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* A subtle shadow for depth */
+            border-left: 4px solid #007bff; /* A blue left border */
+            margin-bottom: 20px; /* Spacing below the container */
+            animation: slideIn 1.0s ease-out; /* Animation for the message box */
+            font-weight: bold; /* Make text bold */
+        }
+        #model3DContainer {
+            width: 1106px;
+            height: 450px;
+            min-width: 1106px;  /* Ensures it has a minimum width */
+            min-height: 450px; /* Ensures it has a minimum height */
+            
         }
         
        
@@ -198,6 +219,33 @@
                 </div>
             </div>
     </div>
+    <div class="container-model">
+    <p class="mb-4">
+        View the EEG channels on our interactive 3D brain model to better understand the data and its implications. Explore the model in detail by clicking the button below.
+        <br>
+        <!-- Button to open the modal -->
+        <button type="button" class="btn btn-outline-dark" id="view3DModelButton">
+            View 3D Model
+        </button>
+        <!-- Modal for 3D Model -->
+        <div class="modal fade" id="model3DModal" tabindex="-1" aria-labelledby="model3DModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                <h5 class="modal-title" id="model3DModalLabel">3D Human Brain Model with EEG Channels</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                </div>
+                <div class="modal-body" style="height: 500px;">
+                <!-- Placeholder for 3D model -->
+                <div id="model3DContainer" ></div>
+                </div>
+            </div>
+            </div>
+        </div>   
+    </p>
+</div>
     <!-- New Dataset Form Section -->
     <div class="row justify-content-center mb-4" style="width:60% ; margin-left: auto;margin-right: 152px;">
         <div class="col-md-8">
@@ -239,14 +287,20 @@
         <div class="row justify-content-center mb-4" style="width:60% ; margin-left: auto;margin-right: auto; ">
             <div class="col-md-8">
             <div id="alertBox" class="mt-3"></div>
-            
-
 
              
             <div id="preprocessingStepsContainer" class="preprocessing-steps" style="display:none;">
                 <h2>Preprocessing Steps:</h2>
                 <ul id="preprocessingStepsList"></ul>
             </div>
+            <button id="togglePlotButton" class="btn btn-outline-dark my-2" style="display: none; font-size: medium; padding: 10px 20px; border-radius: 5px;" onclick="togglePlots()">View Plots</button>
+            <div id="plotDiv" style="margin-left: auto; margin-right: auto;"></div>
+            <div id="loadingSpinner5" class="text-center d-none">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        
 
             <button id="extractFeaturesButton" class="btn btn-primary mt-3" style="display:none;">Extract Features</button>
             <!-- Spinner element (hidden by default) -->
@@ -288,7 +342,100 @@
         </div>
         </div>
 
+
+        <script type="module">
+
+            import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.135.0/build/three.module.js';
+            import { OrbitControls } from 'https://threejsfundamentals.org/threejs/resources/threejs/r122/examples/jsm/controls/OrbitControls.js';
+            import { GLTFLoader } from 'https://threejsfundamentals.org/threejs/resources/threejs/r122/examples/jsm/loaders/GLTFLoader.js';
+
+            let scene, camera, renderer, controls;
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const viewButton = document.getElementById('view3DModelButton');
+                viewButton.addEventListener('click', showModal);
+            });
+
+            function showModal() {
+                var myModal = new bootstrap.Modal(document.getElementById('model3DModal'));
+                myModal.show();
+                init(1106, 450); // Force specific dimensions
+                animate();
+            }
+
+            function init(width, height) {
+                const container = document.getElementById('model3DContainer');
+                console.log(document.getElementById('model3DContainer'));
+                console.log("Forced dimensions:", width, height);
+
+                // Clear existing content
+                container.innerHTML = '';
+
+                scene = new THREE.Scene();
+                camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(width, height);
+                renderer.setClearColor(0xffffff);  // Set background color to white
+
+                container.appendChild(renderer.domElement);
+
+    
+                controls = new OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+    
+                const ambientLight = new THREE.AmbientLight(0xFFD8C0);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+                directionalLight.position.set(0, 1, 0);
+                scene.add(ambientLight);
+                scene.add(directionalLight);
+    
+                // Load a GLTF model
+                const loader = new GLTFLoader();
+                loader.load(
+                    '/static/img/head.gltf',
+                    function (gltf) {
+                        gltf.scene.traverse((child) => {
+                    if (child.isMesh) {
+                        console.log(child.material); // Log the material to check its properties
+                        child.material = new THREE.MeshStandardMaterial({ color: 0x555555 });
+                    }
+                });
+                        scene.add(gltf.scene);
+                        gltf.scene.scale.set(10, 10, 10); // Adjust scale if necessary
+                        gltf.scene.position.set(0, 0, 0); // Center the model
+
+                    },
+                    undefined,
+                    function (error) {
+                        console.error('An error happened during loading the model:', error);
+                    }
+                );
+    
+                camera.position.z = 5;
+            }
+    
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update(); // only required if controls.enableDamping = true, or if controls.autoRotate = true
+                renderer.render(scene, camera);
+            }
+
+            function onWindowResize() {
+                // Update to use forced dimensions on resize
+                if (renderer && camera) {
+                    camera.aspect = 1106 / 450;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(1106, 450);
+                }
+            }
+
+        window.addEventListener('resize', onWindowResize);
+    
+        </script>        
+
    <script>
+
 document.getElementById('optionNewDataset').addEventListener('click', function() {
     console.log('Option 1 clicked. Attempting to display newDatasetForm.');
    
@@ -378,13 +525,14 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
         spinner.classList.add('d-none');
         console.log("data is good");
 
-        var goBackButton = document.createElement('button');
+                var goBackButton = document.createElement('button');
                 goBackButton.textContent = 'Go back to select another model';
                 goBackButton.className = 'btn btn-outline-dark'; // Use Bootstrap classes
                 goBackButton.style.marginTop = '20px';
                 goBackButton.style.marginRight = '10px'
                 goBackButton.style.cursor = 'pointer';
                 goBackButton.addEventListener('click', function() {
+
                 // Set a flag in session storage indicating that the loading process has started
                 sessionStorage.setItem('loadingStatus', 'started');
                 sessionStorage.setItem('loadingMessage', 'Loading, please wait...');
@@ -398,7 +546,7 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
         })
             
                 }); 
-                var downloadButton = document.createElement('button');
+                    var downloadButton = document.createElement('button');
                     downloadButton.textContent = 'Download Result';
                     downloadButton.className = 'btn btn-outline-primary';
                     downloadButton.style.marginTop = '20px';
@@ -407,14 +555,29 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                         window.location.href = '/download_predictions_mat'; // Modify this URL to your actual download URL
                     });
 
+                    document.getElementById('predictionMessage_train').addEventListener('click', function(event) {
+                    if (event.target && event.target.matches("button.btn-outline-dark")) {
+                        console.log("Delegated button click");
+                        sessionStorage.setItem('loadingStatus', 'started');
+                        sessionStorage.setItem('loadingMessage', 'Loading, please wait...');
+                        document.getElementById('predictOnTrainingData').innerHTML = "<p>Loading, please wait...</p>";
+                        window.location.href = '/mat_classification';
+                    }
+                });
+
+                document.getElementById('predictionMessage_train').addEventListener('click', function(event) {
+                if (event.target && event.target.matches("button.btn-outline-primary")) {
+                    console.log("Delegated download button click");
+                    window.location.href = '/download_predictions_mat';
+                }
+            });
+
 
                 var predictionMessageContainer = document.getElementById('predictionMessage_train');
                 predictionMessageContainer.innerHTML = ''; // Clear any existing content
                 predictionMessageContainer.appendChild(goBackButton); // Append the button to the container
                 predictionMessageContainer.appendChild(downloadButton); // Append the button to the container
 
-
-               
         
         // Assuming 'all_subjects_predictions' contains an array of prediction results
         if (data.all_subjects_predictions_with_metrics && data.all_subjects_predictions_with_metrics.length > 0) {
@@ -423,6 +586,10 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                 let subject = subjectData.predictions[0].subject_identifier.split('_')[0]; // e.g., 'sub-005'
                 let session = subjectData.predictions[0].subject_identifier.split('_')[1]; // e.g., 'ses-03'
                 let metrics = subjectData.metrics;
+                let detailsSplit = subjectData.details_split;
+
+
+                
                 if (!predictionsBySubject[subject]) {
                     predictionsBySubject[subject] = {};
                 }
@@ -430,7 +597,9 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                 if (!predictionsBySubject[subject][session]) {
                     predictionsBySubject[subject][session] = {
                         predictions: [],
-                        metrics: metrics
+                        metrics: metrics,
+                        detailsSplit: detailsSplit
+
                     };
                 }
 
@@ -453,8 +622,9 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                     
                     let sessionPredictions = predictionsBySubject[subject][session].predictions;
                     let sessionMetrics = predictionsBySubject[subject][session].metrics;
+                    let sessionDetailsSplit = predictionsBySubject[subject][session].detailsSplit;
 
-                    
+
                 // Create a table for the predictions list
                 let sessionPredictionsTable = `
                     <table class="table table-striped">
@@ -468,10 +638,6 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                         </thead>
                         <tbody>`;
 
-
-                 
-            
-
                 // Fill the table with prediction data
                 sessionPredictions.forEach((pred, predIndex) => {
                     // Determine the icon to use based on correctness
@@ -480,7 +646,7 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                         `<span class="wrong-icon">&#10008;</span>`;
                     sessionPredictionsTable += `
                         <tr>
-                            <td>${predIndex + 1}</td>
+                            <td>${pred.test_index}</td>
                             <td>${pred.actual_label}</td>
                             <td>${pred.predicted_label}</td>
                             <td>${correctnessIcon}</td>
@@ -517,7 +683,10 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
 
                     metricsContent += `</tbody></table></div>`;
 
-                    tabPanesContent += `<div class="tab-pane ${isActive}" id="pane-${subject}-${session}" role="tabpanel">${metricsContent}${sessionPredictionsTable}</div>`;
+                    let detailsSplitContent = `<div class="details-split-content"><h5>Details Split</h5><p>${sessionDetailsSplit}</p></div>`;
+
+
+                    tabPanesContent += `<div class="tab-pane ${isActive}" id="pane-${subject}-${session}" role="tabpanel">${detailsSplitContent}${metricsContent}${sessionPredictionsTable}</div>`;
                 });
 
                 // Construct the card with tabs for each subject
@@ -533,7 +702,9 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                     </div>
                 `; }
                 document.getElementById('predictionMessage_train').style.display = 'block';
+
                 predictionMessageContainer.innerHTML += resultsContent;
+                
 
             // Activate Bootstrap tabs functionality
             $('.nav-tabs a').click(function(e) {
@@ -609,7 +780,7 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                 var preprocessRequiredMessageDiv = document.createElement('div');
                 preprocessRequiredMessageDiv.id = 'preprocessRequiredMessage';
                 preprocessRequiredMessageDiv.className = 'message-box mt-3 p-3';
-                preprocessRequiredMessageDiv.innerHTML = '<strong>Raw data requires preprocessing before predictions can be made. Please complete the preprocessing step, and then click on <em>"Extract Features"</em> to proceed with the extraction. This will ensure the data is prepared correctly for prediction.</strong>';
+                preprocessRequiredMessageDiv.innerHTML = '<strong>Raw data requires preprocessing before predictions can be made. Please complete the preprocessing step, and then click on <em>"Extract Features"</em> to proceed with the extraction. This will ensure the data is prepared correctly for prediction.<br> Additionally, you can view the plots comparing the original and preprocessed EEG channels to understand the changes and improvements made through preprocessing.</strong>';
                 messageContainer.appendChild(preprocessRequiredMessageDiv);
                 // Add the Preprocess button to alertBox
                 var preprocessButtonHTML = `
@@ -630,14 +801,19 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                 document.getElementById('preprocessButton').addEventListener('click', function() {
                     preprocessButtonClicked = !preprocessButtonClicked; // Toggle button state
                     let spinner = document.getElementById('loadingSpinner1');
+                    var viewPlotsButton = document.getElementById('togglePlotButton'); // Get the View Plots button
+
+                    viewPlotsButton.style.display = 'block'; // Initially hide the View Plots button
 
 
                     if (preprocessButtonClicked) {
                         // Show spinner here when the button is clicked
                         spinner.classList.remove('d-none');
 
+
                         if (!preprocessingStepsFetched) { // Fetch preprocessing steps only if not fetched before
                             // Call the preprocess function on the backend
+
                             
                             fetch('/mat_preprocess_predict', {
                                 method: 'POST'
@@ -936,6 +1112,115 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
                     });
                 });
 
+
+let plotsFetched = false; // Flag to check if plots have been fetched
+
+
+function viewPlots() {
+    var spinner = document.getElementById('loadingSpinner5');
+    
+
+    console.log("Entered view plots");
+    if (!plotsFetched) {
+        spinner.classList.remove('d-none');
+        console.log("Fetching and plotting data...");
+        fetch('{{ url_for("file_reader.get_plot_data") }}', {
+            method: 'GET'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+    .then(data => {
+        spinner.classList.add('d-none');
+
+        const rows = Math.ceil(data.channels.length / 5) * 2; // two rows per channel
+        const cols = 5;
+        let layout = {
+            title: 'Comparison Original vs. Processed',
+            showlegend: false,
+            grid: {rows: rows, columns: cols, pattern: 'independent'},
+            height: rows * 300, // Adjust height based on the number of rows
+            width: 1500 // Adjust width if necessary
+        };
+
+        // Dynamically create axis titles
+        data.channels.forEach((channel, index) => {
+            const baseIndex = (Math.floor(index / 5) * 10) + (index % 5) + 1;
+            layout['xaxis' + baseIndex] = {
+                title: `${channel} - Original`
+            };
+            layout['yaxis' + baseIndex] = {
+                title: 'Amplitude (µV)'
+            };
+            layout['xaxis' + (baseIndex + 5)] = {
+                title: `${channel} - Processed`
+            };
+            layout['yaxis' + (baseIndex + 5)] = {
+                title: 'Amplitude (µV)'
+            };
+        });
+
+        let traces = [];
+        
+        data.channels.forEach((channel, index) => {
+            const baseIndex = (Math.floor(index / 5) * 10) + (index % 5) + 1;
+            const xAxisOrig = 'x' + baseIndex;
+            const yAxisOrig = 'y' + baseIndex;
+            const xAxisProc = 'x' + (baseIndex + 5);
+            const yAxisProc = 'y' + (baseIndex + 5);
+
+            // Original data trace
+            traces.push({
+                x: data.times,
+                y: data.raw_data[index],
+                type: 'scatter',
+                mode: 'lines',
+                name: `${channel} Original`,
+                xaxis: xAxisOrig,
+                yaxis: yAxisOrig
+            });
+
+            // Processed data trace
+            traces.push({
+                x: data.times,
+                y: data.preprocessed_data[index],
+                type: 'scatter',
+                mode: 'lines',
+                name: `${channel} Processed`,
+                xaxis: xAxisProc,
+                yaxis: yAxisProc
+            });
+        });
+
+        Plotly.newPlot('plotDiv', traces, layout);
+        plotsFetched = true; // Set the flag to true after plotting
+
+    })
+    .catch(error => {
+        console.error('Failed to fetch plot data:', error);
+    });
+}
+}
+
+function togglePlots() {
+    const plotDiv = document.getElementById('plotDiv');
+    const toggleButton = document.getElementById('togglePlotButton');
+
+
+    if (plotDiv.style.display === 'none') {
+
+        plotDiv.style.display = 'block'; // Show the plots
+        toggleButton.textContent = 'Hide Plots';
+        viewPlots(); // Call viewPlots to fetch and plot if not already done
+    } else {
+        plotDiv.style.display = 'none'; // Hide the plots
+        toggleButton.textContent = 'View Plots';
+    }
+}                
+
     
 </script>
 
@@ -945,6 +1230,14 @@ document.getElementById('predictTrainingButton').addEventListener('click', funct
    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.min.js"></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+   <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"></script>
+
+
 
 
 </body>

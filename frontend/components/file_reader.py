@@ -29,9 +29,9 @@ print("Backend directory:", backend_dir)
 # Add the backend directory to the sys.path
 sys.path.insert(0, backend_dir)
 
-from backend.classification import read_eeg_file, read_edf_eeg, read_mat_eeg, csv_identification,processed_data_keywords,csv_svc_model,preprocess_raw_eeg,extract_features_csp,mat_modeling,get_label_text,read_label_conditions,train_test_split_models
+from backend.classification import read_eeg_file, read_eeg_file_unkown_dataset, read_mat_eeg, csv_identification,processed_data_keywords,csv_svc_model,preprocess_raw_eeg,extract_features_csp,mat_modeling,get_label_text,read_label_conditions,train_test_split_models
 from backend.classification import csv_svc_model_new,csv_random_model,csv_logistic_model,csv_knn_model,csv_cnn_model,load_and_predict_svc,load_and_predict_random,load_and_predict_knn,load_and_predict_cnn,load_and_predict_logisitc,csv_features,predict_on_training_data
-from backend.classification import mat_modeling_svc,mat_modeling_random,mat_modeling_logistic,mat_modeling_knn,mat_modeling_cnn,predict_movement,predict_movement_svc,predict_movement_random,predict_movement_logistic,predict_movement_knn,predict_movement_cnn
+from backend.classification import mat_modeling_svc,mat_modeling_random,mat_modeling_logistic,mat_modeling_knn,mat_modeling_cnn,predict_movement,predict_movement_svc,predict_movement_random,predict_movement_logistic,predict_movement_knn,predict_movement_cnn,visualize_3d_brain_model
 from backend.features import extract_features
 
 
@@ -413,15 +413,18 @@ def mat_classification():
             all_preprocessing_steps = []
             label_get=[]
             labels_message=[]
+            subject=[]
 
             for file_path in mat_file_paths:
                 print("Processing file paths:", mat_file_paths)
                 filename = os.path.basename(file_path)
                 filename_parts = filename.split('_')
                 subject_identifier = '_'.join(filename_parts[1:3])  # sub-XXX_ses-XX
+                subject.append(subject_identifier)
+                print("subject identifier:",subject_identifier)
 
                 raw, sfreq, labels,data_info = read_mat_eeg(file_path)
-                preprocessed_raw, preprocessing_steps = preprocess_raw_eeg(raw, sfreq, subject_identifier)
+                raw_data,preprocessed_raw,preprocessed_channels, preprocessing_steps = preprocess_raw_eeg(raw, sfreq, subject_identifier)
                 features_message,features_df = extract_features_csp(preprocessed_raw, 250, labels, epoch_length=1.0)
                 accuracy_messages,label_get= mat_modeling_svc(subject_identifier, features_df, labels)
                 labels_message.append(label_get)
@@ -463,12 +466,19 @@ def mat_classification():
 
             # Store the reference to this file in the session
             session['preprocessed_raw_file_path'] = raw_file_path
-            session['subject_identifier'] = subject_identifier
+            session['subject_identifier'] = subject
             session['labels'] = labels
             # Clear the stored file paths after processing
             #session.pop('mat_file_paths', None)
             # Retrieve preprocessing steps from session
             #preprocessing_steps = session.get('preprocessing_steps', [])
+            # Store necessary data for plotting in Flask session or another method
+            session['plot_data'] = {
+                'raw_data': raw_data.get_data().tolist(),
+                'preprocessed_data': preprocessed_raw.get_data().tolist(),
+                'channels': preprocessed_channels,
+                'times': raw.times.tolist()
+            }
             # Store the collected preprocessing steps in the session
             session['preprocessing_steps'] = all_preprocessing_steps  # Store in session
 
@@ -505,6 +515,15 @@ def mat_classification():
             return jsonify({'error': str(e)}), 500
     else:         
         return render_template('mat_files_class.html')
+    
+@bp_file_reader.route('/get_plot_data', methods=['GET'])
+def get_plot_data():
+    # Retrieve the stored plot data
+    plot_data = session.get('plot_data', None)
+    if plot_data is not None:
+        return jsonify(plot_data)
+    else:
+        return jsonify({'error': 'Plot data not found'}), 404    
     
 @bp_file_reader.route('/extract-csp-features', methods=['POST'])
 def extract_csp_features():
@@ -550,82 +569,108 @@ def perform_mat_modeling_svc():
         if not features_file_path or not os.path.exists(features_file_path):
             raise FileNotFoundError("Features file path not found or file does not exist.")
 
-        # Read features_df from the CSV file
         features_df = pd.read_csv(features_file_path)
-        subject_identifier = session.get('subject_identifier')
+        subject_identifiers = session.get('subject_identifier')
         labels = session.get('labels')
 
+        all_accuracy_messages = []
+        all_labels_messages = []
+        total_accuracy = 0
+        total_precision = 0
+        total_recall = 0
+        total_f1_score = 0
+        count = 0
 
-        # Call the mat_modeling function
-        accuracy_messages,labels_message= mat_modeling_svc(subject_identifier, features_df, labels)
+        for subject in subject_identifiers:
+            accuracy_messages, labels_message = mat_modeling_svc(subject, features_df, labels)
+            all_accuracy_messages.extend(accuracy_messages)
+            all_labels_messages.extend(labels_message)
+            
+            # Extract metrics from each session message
+            for message in accuracy_messages:
+                if 'Accuracy' in message:
+                    accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
+                    precision_str = message.split('Precision: ')[1].split('%')[0]
+                    recall_str = message.split('Recall: ')[1].split('%')[0]
+                    f1_score_str = message.split('F1 Score: ')[1].split('%')[0]
+                    total_accuracy += float(accuracy_str)
+                    total_precision += float(precision_str)
+                    total_recall += float(recall_str)
+                    total_f1_score += float(f1_score_str)
+                    count += 1
 
-        accuracy_value = None
-        for message in accuracy_messages:
-            if 'Accuracy' in message:
-                # Extract the accuracy percentage from the string
-                accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
-                try:
-                    accuracy_value = float(accuracy_str)
-                except ValueError:
-                    # Handle the exception if the conversion fails
-                    print(f"Could not convert accuracy to float: '{accuracy_str}'")
-                break  # Assuming we only need the first occurrence
-
-        if accuracy_value is None:
-            raise ValueError("Accuracy value was not found in accuracy messages.")
-        #Store the accuracy, so you can get the highest accuracy
-        session['model_accuracies']['SVC'] = accuracy_value
-
-        # Store the accuracy messages in the session or pass to the template
-        session['accuracy_messages'] = accuracy_messages
+        # Calculate average metrics
+        if count > 0:
+            avg_accuracy = total_accuracy / count
+            avg_precision = total_precision / count
+            avg_recall = total_recall / count
+            avg_f1_score = total_f1_score / count
+            session['model_accuracies']['SVC'] = avg_accuracy
+            average_metrics_message = f"Average Metrics across sessions: Accuracy: {avg_accuracy}%, Precision: {avg_precision}%, Recall: {avg_recall}%, F1 Score: {avg_f1_score}%"
+            all_accuracy_messages.append(average_metrics_message)
         
+        session['accuracy_messages'] = all_accuracy_messages
+        session['labels_messages'] = all_labels_messages
 
-        return jsonify(accuracy=accuracy_messages)
+        return jsonify(accuracy=all_accuracy_messages)
     except Exception as e:
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
     
 @bp_file_reader.route('/perform_mat_modeling_random', methods=['POST'])
 def perform_mat_modeling_random():
-    try:
-        features_file_path = session.get('features_file_path')
-        if not features_file_path or not os.path.exists(features_file_path):
-            raise FileNotFoundError("Features file path not found or file does not exist.")
+        try:
+            features_file_path = session.get('features_file_path')
+            if not features_file_path or not os.path.exists(features_file_path):
+                raise FileNotFoundError("Features file path not found or file does not exist.")
 
-        # Read features_df from the CSV file
-        features_df = pd.read_csv(features_file_path)
-        subject_identifier = session.get('subject_identifier')
-        labels = session.get('labels')
+            features_df = pd.read_csv(features_file_path)
+            subject_identifiers = session.get('subject_identifier')
+            labels = session.get('labels')
 
+            all_accuracy_messages = []
+            all_labels_messages = []
+            total_accuracy = 0
+            total_precision = 0
+            total_recall = 0
+            total_f1_score = 0
+            count = 0
 
-        # Call the mat_modeling function
-        accuracy_messages,labels_message = mat_modeling_random(subject_identifier, features_df, labels)
+            for subject in subject_identifiers:
+                accuracy_messages, labels_message = mat_modeling_random(subject, features_df, labels)
+                all_accuracy_messages.extend(accuracy_messages)
+                all_labels_messages.extend(labels_message)
+                
+                # Extract metrics from each session message
+                for message in accuracy_messages:
+                    if 'Accuracy' in message:
+                        accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
+                        precision_str = message.split('Precision: ')[1].split('%')[0]
+                        recall_str = message.split('Recall: ')[1].split('%')[0]
+                        f1_score_str = message.split('F1 Score: ')[1].split('%')[0]
+                        total_accuracy += float(accuracy_str)
+                        total_precision += float(precision_str)
+                        total_recall += float(recall_str)
+                        total_f1_score += float(f1_score_str)
+                        count += 1
 
-        accuracy_value = None
-        for message in accuracy_messages:
-            if 'Accuracy' in message:
-                # Extract the accuracy percentage from the string
-                accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
-                try:
-                    accuracy_value = float(accuracy_str)
-                except ValueError:
-                    # Handle the exception if the conversion fails
-                    print(f"Could not convert accuracy to float: '{accuracy_str}'")
-                break  # Assuming we only need the first occurrence
+            # Calculate average metrics
+            if count > 0:
+                avg_accuracy = total_accuracy / count
+                avg_precision = total_precision / count
+                avg_recall = total_recall / count
+                avg_f1_score = total_f1_score / count
+                session['model_accuracies']['Random'] = avg_accuracy
+                average_metrics_message = f"Average Metrics across sessions: Accuracy: {avg_accuracy}%, Precision: {avg_precision}%, Recall: {avg_recall}%, F1 Score: {avg_f1_score}%"
+                all_accuracy_messages.append(average_metrics_message)
+            
+            session['accuracy_messages'] = all_accuracy_messages
+            session['labels_messages'] = all_labels_messages
 
-        if accuracy_value is None:
-            raise ValueError("Accuracy value was not found in accuracy messages.")
-        #Store the accuracy, so you can get the highest accuracy
-        session['model_accuracies']['Random'] = accuracy_value
-
-        # Store the accuracy messages in the session or pass to the template
-        session['accuracy_messages'] = accuracy_messages
-        
-
-        return jsonify(accuracy=accuracy_messages)
-    except Exception as e:
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500   
+            return jsonify(accuracy=all_accuracy_messages)
+        except Exception as e:
+            print(traceback.format_exc())
+            return jsonify({'error': str(e)}), 500  
 
 @bp_file_reader.route('/perform_mat_modeling_logistic', methods=['POST'])
 def perform_mat_modeling_logistic():
@@ -634,41 +679,53 @@ def perform_mat_modeling_logistic():
         if not features_file_path or not os.path.exists(features_file_path):
             raise FileNotFoundError("Features file path not found or file does not exist.")
 
-        # Read features_df from the CSV file
         features_df = pd.read_csv(features_file_path)
-        subject_identifier = session.get('subject_identifier')
+        subject_identifiers = session.get('subject_identifier')
         labels = session.get('labels')
 
+        all_accuracy_messages = []
+        all_labels_messages = []
+        total_accuracy = 0
+        total_precision = 0
+        total_recall = 0
+        total_f1_score = 0
+        count = 0
 
-        # Call the mat_modeling function
-        accuracy_messages,labels_message = mat_modeling_logistic(subject_identifier, features_df, labels)
+        for subject in subject_identifiers:
+            accuracy_messages, labels_message = mat_modeling_logistic(subject, features_df, labels)
+            all_accuracy_messages.extend(accuracy_messages)
+            all_labels_messages.extend(labels_message)
+            
+            # Extract metrics from each session message
+            for message in accuracy_messages:
+                if 'Accuracy' in message:
+                    accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
+                    precision_str = message.split('Precision: ')[1].split('%')[0]
+                    recall_str = message.split('Recall: ')[1].split('%')[0]
+                    f1_score_str = message.split('F1 Score: ')[1].split('%')[0]
+                    total_accuracy += float(accuracy_str)
+                    total_precision += float(precision_str)
+                    total_recall += float(recall_str)
+                    total_f1_score += float(f1_score_str)
+                    count += 1
 
-        accuracy_value = None
-        for message in accuracy_messages:
-            if 'Accuracy' in message:
-                # Extract the accuracy percentage from the string
-                accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
-                try:
-                    accuracy_value = float(accuracy_str)
-                except ValueError:
-                    # Handle the exception if the conversion fails
-                    print(f"Could not convert accuracy to float: '{accuracy_str}'")
-                break  # Assuming we only need the first occurrence
-
-        if accuracy_value is None:
-            raise ValueError("Accuracy value was not found in accuracy messages.")
-        #Store the accuracy, so you can get the highest accuracy
-        session['model_accuracies']['Logistic'] = accuracy_value
-
-        # Store the accuracy messages in the session or pass to the template
-        session['accuracy_messages'] = accuracy_messages
-       
+        # Calculate average metrics
+        if count > 0:
+            avg_accuracy = total_accuracy / count
+            avg_precision = total_precision / count
+            avg_recall = total_recall / count
+            avg_f1_score = total_f1_score / count
+            session['model_accuracies']['Logistic'] = avg_accuracy
+            average_metrics_message = f"Average Metrics across sessions: Accuracy: {avg_accuracy}%, Precision: {avg_precision}%, Recall: {avg_recall}%, F1 Score: {avg_f1_score}%"
+            all_accuracy_messages.append(average_metrics_message)
         
+        session['accuracy_messages'] = all_accuracy_messages
+        session['labels_messages'] = all_labels_messages
 
-        return jsonify(accuracy=accuracy_messages)
+        return jsonify(accuracy=all_accuracy_messages)
     except Exception as e:
         print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500  
+        return jsonify({'error': str(e)}), 500 
 
 @bp_file_reader.route('/perform_mat_modeling_knn', methods=['POST'])
 def perform_mat_modeling_knn():
@@ -677,40 +734,53 @@ def perform_mat_modeling_knn():
         if not features_file_path or not os.path.exists(features_file_path):
             raise FileNotFoundError("Features file path not found or file does not exist.")
 
-        # Read features_df from the CSV file
         features_df = pd.read_csv(features_file_path)
-        subject_identifier = session.get('subject_identifier')
+        subject_identifiers = session.get('subject_identifier')
         labels = session.get('labels')
 
+        all_accuracy_messages = []
+        all_labels_messages = []
+        total_accuracy = 0
+        total_precision = 0
+        total_recall = 0
+        total_f1_score = 0
+        count = 0
 
-        # Call the mat_modeling function
-        accuracy_messages,labels_message = mat_modeling_knn(subject_identifier, features_df, labels)
+        for subject in subject_identifiers:
+            accuracy_messages, labels_message = mat_modeling_knn(subject, features_df, labels)
+            all_accuracy_messages.extend(accuracy_messages)
+            all_labels_messages.extend(labels_message)
+            
+            # Extract metrics from each session message
+            for message in accuracy_messages:
+                if 'Accuracy' in message:
+                    accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
+                    precision_str = message.split('Precision: ')[1].split('%')[0]
+                    recall_str = message.split('Recall: ')[1].split('%')[0]
+                    f1_score_str = message.split('F1 Score: ')[1].split('%')[0]
+                    total_accuracy += float(accuracy_str)
+                    total_precision += float(precision_str)
+                    total_recall += float(recall_str)
+                    total_f1_score += float(f1_score_str)
+                    count += 1
 
-        accuracy_value = None
-        for message in accuracy_messages:
-            if 'Accuracy' in message:
-                # Extract the accuracy percentage from the string
-                accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
-                try:
-                    accuracy_value = float(accuracy_str)
-                except ValueError:
-                    # Handle the exception if the conversion fails
-                    print(f"Could not convert accuracy to float: '{accuracy_str}'")
-                break  # Assuming we only need the first occurrence
-
-        if accuracy_value is None:
-            raise ValueError("Accuracy value was not found in accuracy messages.")
-        #Store the accuracy, so you can get the highest accuracy
-        session['model_accuracies']['KNN'] = accuracy_value
-
-        # Store the accuracy messages in the session or pass to the template
-        session['accuracy_messages'] = accuracy_messages
+        # Calculate average metrics
+        if count > 0:
+            avg_accuracy = total_accuracy / count
+            avg_precision = total_precision / count
+            avg_recall = total_recall / count
+            avg_f1_score = total_f1_score / count
+            session['model_accuracies']['KNN'] = avg_accuracy
+            average_metrics_message = f"Average Metrics across sessions: Accuracy: {avg_accuracy}%, Precision: {avg_precision}%, Recall: {avg_recall}%, F1 Score: {avg_f1_score}%"
+            all_accuracy_messages.append(average_metrics_message)
         
+        session['accuracy_messages'] = all_accuracy_messages
+        session['labels_messages'] = all_labels_messages
 
-        return jsonify(accuracy=accuracy_messages)
+        return jsonify(accuracy=all_accuracy_messages)
     except Exception as e:
         print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500    
+        return jsonify({'error': str(e)}), 500  
 
 @bp_file_reader.route('/perform_mat_modeling_cnn', methods=['POST'])
 def perform_mat_modeling_cnn():
@@ -719,40 +789,53 @@ def perform_mat_modeling_cnn():
         if not features_file_path or not os.path.exists(features_file_path):
             raise FileNotFoundError("Features file path not found or file does not exist.")
 
-        # Read features_df from the CSV file
         features_df = pd.read_csv(features_file_path)
-        subject_identifier = session.get('subject_identifier')
+        subject_identifiers = session.get('subject_identifier')
         labels = session.get('labels')
 
+        all_accuracy_messages = []
+        all_labels_messages = []
+        total_accuracy = 0
+        total_precision = 0
+        total_recall = 0
+        total_f1_score = 0
+        count = 0
 
-        # Call the mat_modeling function
-        accuracy_messages,labels_message= mat_modeling_cnn(subject_identifier, features_df, labels)
+        for subject in subject_identifiers:
+            accuracy_messages, labels_message = mat_modeling_cnn(subject, features_df, labels)
+            all_accuracy_messages.extend(accuracy_messages)
+            all_labels_messages.extend(labels_message)
+            
+            # Extract metrics from each session message
+            for message in accuracy_messages:
+                if 'Accuracy' in message:
+                    accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
+                    precision_str = message.split('Precision: ')[1].split('%')[0]
+                    recall_str = message.split('Recall: ')[1].split('%')[0]
+                    f1_score_str = message.split('F1 Score: ')[1].split('%')[0]
+                    total_accuracy += float(accuracy_str)
+                    total_precision += float(precision_str)
+                    total_recall += float(recall_str)
+                    total_f1_score += float(f1_score_str)
+                    count += 1
 
-        accuracy_value = None
-        for message in accuracy_messages:
-            if 'Accuracy' in message:
-                # Extract the accuracy percentage from the string
-                accuracy_str = message.split('Accuracy: ')[1].split('%')[0]
-                try:
-                    accuracy_value = float(accuracy_str)
-                except ValueError:
-                    # Handle the exception if the conversion fails
-                    print(f"Could not convert accuracy to float: '{accuracy_str}'")
-                break  # Assuming we only need the first occurrence
-
-        if accuracy_value is None:
-            raise ValueError("Accuracy value was not found in accuracy messages.")
-        #Store the accuracy, so you can get the highest accuracy
-        session['model_accuracies']['CNN'] = accuracy_value
-
-        # Store the accuracy messages in the session or pass to the template
-        session['accuracy_messages'] = accuracy_messages
+        # Calculate average metrics
+        if count > 0:
+            avg_accuracy = total_accuracy / count
+            avg_precision = total_precision / count
+            avg_recall = total_recall / count
+            avg_f1_score = total_f1_score / count
+            session['model_accuracies']['CNN'] = avg_accuracy
+            average_metrics_message = f"Average Metrics across sessions: Accuracy: {avg_accuracy}%, Precision: {avg_precision}%, Recall: {avg_recall}%, F1 Score: {avg_f1_score}%"
+            all_accuracy_messages.append(average_metrics_message)
         
+        session['accuracy_messages'] = all_accuracy_messages
+        session['labels_messages'] = all_labels_messages
 
-        return jsonify(accuracy=accuracy_messages)
+        return jsonify(accuracy=all_accuracy_messages)
     except Exception as e:
         print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500 
+        return jsonify({'error': str(e)}), 500
     
     
 @bp_file_reader.route('/get_highest_accuracy', methods=['GET'])
@@ -771,25 +854,24 @@ def get_highest_accuracy():
 @bp_file_reader.route('/perform_train_test_mat', methods=['POST'])
 def perform_train_test_mat():
     try:
-        session['mat_model']=[]
-        session['mat_prediction']=[]
+        session['mat_model'] = []
+        session['mat_prediction'] = []
         # Parse the JSON request data
         data = request.get_json()
         model_name = data.get('model')
         combined_predictions = []
-        session['mat_model']=model_name
+        session['mat_model'] = model_name
 
         # Retrieve the list of feature CSV paths and subject identifiers from the session
         features_csv_paths = session.get('features_csv_paths')
 
-
-        for subject_identifier,features_csv_path in features_csv_paths:
-            print("subject iden:",subject_identifier)
+        for subject_identifier, features_csv_path in features_csv_paths:
+            print("subject iden:", subject_identifier)
             features_df = pd.read_csv(features_csv_path)
             labels = session.get('labels')
 
             # Call the train_test_split_models function for each subject
-            subject_predictions, subject_metrics = train_test_split_models(
+            subject_predictions, subject_metrics, subject_details_split = train_test_split_models(
                 subject_identifier, features_df, labels, model_name, test_size=0.2
             )
 
@@ -804,23 +886,24 @@ def perform_train_test_mat():
             sanitized_predictions = [
                 {
                     k: (map_label_to_description(v) if k in ['actual_label', 'predicted_label'] else int(v))
-                    if isinstance(v, np.int32) else v
+                    if isinstance(v, (np.int32, np.int64)) else v
                     for k, v in prediction.items()
                 }
-                for prediction in subject_predictions # Adjusted to access 'predictions'
+                for prediction in subject_predictions  # Adjusted to access 'predictions'
             ]
 
-            # Add the metrics to the combined_predictions dictionary
+            # Add the metrics and details to the combined_predictions dictionary
             sanitized_predictions_with_metrics = {
                 'predictions': sanitized_predictions,
-                'metrics': subject_metrics
+                'metrics': subject_metrics,
+                'details_split': subject_details_split
             }
 
-            # Add the sanitized predictions and metrics for the subject to the combined list
+            # Add the sanitized predictions, metrics, and details for the subject to the combined list
             combined_predictions.append(sanitized_predictions_with_metrics)
 
-        session['mat_prediction']=combined_predictions
-        # Modify the return statement to include metrics
+        session['mat_prediction'] = combined_predictions
+        # Modify the return statement to include metrics and details split
         return jsonify({
             'status': 'success',
             'all_subjects_predictions_with_metrics': combined_predictions,
@@ -871,7 +954,7 @@ def predictions():
 
                 try:
                     if extension in {'csv', 'xls', 'xlsx', 'xlsm', 'xlsb'}:
-                        raw, sfreq,clean_message = read_eeg_file(file_path)
+                        raw, sfreq,clean_message = read_eeg_file_unkown_dataset(file_path)
                         if raw is not None:
                             file_path_csv.append(file_path)
                     elif extension in {'txt'}:
@@ -917,7 +1000,7 @@ def predict():
 
     
     for file_path in file_path_csv:
-        raw, sfreq,clean_message= read_eeg_file(file_path)
+        raw, sfreq,clean_message= read_eeg_file_unkown_dataset(file_path)
         csv_features_dataframe = csv_features(raw)
         if 'label' in csv_features_dataframe.columns:
             csv_features_dataframe.drop('label', axis=1, inplace=True)
@@ -1188,7 +1271,7 @@ def mat_preprocess_predict():
                 subject_identifier = '_'.join(filename_parts[1:3])  # sub-XXX_ses-XX
 
                 raw, sfreq, labels,data_info = read_mat_eeg(file_path)
-                preprocessed_raw_predict, preprocessing_steps_predict = preprocess_raw_eeg(raw, sfreq, subject_identifier)
+                raw_data,preprocessed_raw_predict,preprocessed_channels, preprocessing_steps_predict = preprocess_raw_eeg(raw, sfreq, subject_identifier)
                 for step in preprocessing_steps_predict:
                             if step not in all_preprocessing_steps_predict:
                                 all_preprocessing_steps_predict.append(step)    
@@ -1328,7 +1411,7 @@ def perform_mat_prediction():
             subject_identifier = '_'.join(filename_parts[1:3])  # sub-XXX_ses-XX
 
             raw, sfreq, labels,data_info = read_mat_eeg(file_path)
-            preprocessed_raw_predict, preprocessing_steps_predict = preprocess_raw_eeg(raw, sfreq, subject_identifier)
+            raw_data,preprocessed_raw_predict,preprocessed_channels, preprocessing_steps_predict = preprocess_raw_eeg(raw, sfreq, subject_identifier)
             features_message, features_df = extract_features_csp(preprocessed_raw_predict, sfreq, labels)
             
             # Call the appropriate predict function

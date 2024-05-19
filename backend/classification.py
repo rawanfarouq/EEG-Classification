@@ -7,7 +7,9 @@ import random
 import scipy.io
 import ipywidgets as widgets
 import h5py
+import pyvista
 import re
+import vtk
 import matplotlib.pyplot as plt
 from IPython.display import display
 from PyQt5.QtWidgets import QApplication
@@ -38,7 +40,7 @@ from mne.channels import make_standard_montage
 from mne.viz import plot_alignment, Brain
 from scipy.stats import entropy,skew,kurtosis
 from scipy.fft import rfft
-from scipy.signal import welch, find_peaks
+from scipy.signal import welch, find_peaks, sosfiltfilt, butter
 from pyprep.find_noisy_channels import NoisyChannels
 from mne.preprocessing import ICA
 from mne.decoding import CSP
@@ -272,6 +274,125 @@ def read_eeg_file(file_path):
         return None, None,None
     
 
+def read_eeg_file_unkown_dataset(file_path):
+    try:
+        # Create a list to hold messages about data cleanliness
+        cleanliness_messages = []
+        global df_data
+
+
+        print(f"Entered read_eeg_file with {file_path}")
+
+        # Check the file extension and read the file into a DataFrame accordingly
+        if file_path.endswith('.csv'):
+            df_data = pd.read_csv(file_path)
+        elif file_path.endswith(('.xls', '.xlsx', '.xlsm', '.xlsb')):
+            df_data = pd.read_excel(file_path)  # This reads the first sheet by default 
+
+        else:
+            print(f"Unsupported file type for {file_path}.")
+            return None, None,None
+        
+        
+
+        print(f"Number of samples (time points) in the recording: {len(df_data)}")
+        print("DataFrame shape:" ,df_data.shape)
+        cleanliness_messages.append(f"Number of samples (time points) in the recording: {len(df)}")
+        cleanliness_messages.append(f"DataFrame shape: {df_data.shape}")
+        
+
+
+        # unique_prefixes = get_unique_prefixes(df.columns)
+        # print("Unique prefixes:", unique_prefixes)
+        
+        numeric_cols = df_data.select_dtypes(include=[np.number]).columns.tolist()
+        label_cols = [col for col in df_data.columns if col.lower() in ['label', 'labels']]
+        columns_to_check = numeric_cols + label_cols
+
+         # Check for NaN values
+        if df_data[columns_to_check].isnull().values.any():
+            cleanliness_messages.append("Data contains NaN values.")
+            print("Data contains NaN values.")
+        else:
+            cleanliness_messages.append("Data does not contain NaN values")
+            print("Data does not contain NaN values")
+
+        # Check for duplicate rows
+        if df_data[columns_to_check].duplicated().any():
+            cleanliness_messages.append("Data contains duplicate rows.")
+            print("Data contains duplicate rows.")
+        else:
+            cleanliness_messages.append("Data does not contain duplicate rows")
+            print("Data does not contain duplicate rows")
+
+        # Check for columns with all zero variance (flatline signals)
+        if df_data[numeric_cols].var(axis=0).eq(0).any():
+            cleanliness_messages.append("Data contains flatline signals.")
+            print("Data contains flatline signals.")
+        else:
+            cleanliness_messages.append("Data does not contain flatline signals")
+            print("Data does not contain flatline signals")
+
+        # Remove non-numeric columns except 'label' or 'labels'
+        for col in df_data.select_dtypes(exclude=[np.number]).columns:
+            if col not in label_cols:
+                print(f"Column '{col}' is non-numeric and will be removed.")
+                df_data.drop(col, axis=1, inplace=True)
+                
+        print(df_data.head()) 
+        print("DataFrame shape:" ,df_data.shape)
+        cleanliness_messages.append(f"DataFrame Head: {df_data.head()}")
+        
+
+        # Check if the first column is non-numeric and should be used as the index
+        if not np.issubdtype(df_data.iloc[:, 0].dtype, np.number):
+            df_data.set_index(df_data.columns[0], inplace=True)
+        
+        print(df_data.head())  # Displays the first 5 rows of the DataFrame
+        print("DataFrame shape:" ,df_data.shape)
+        
+
+        # Check for a 'timestamp' column and calculate sampling frequency
+        timestamp_present = 'timestamp' in df_data.columns
+        if timestamp_present:
+            time_diffs = np.diff(df_data['timestamp'].values)
+            if np.any(time_diffs == 0):
+                print("Duplicate timestamps found. Sampling frequency cannot be determined.")
+            avg_sampling_period = np.mean(time_diffs)
+            sfreq = 1 / avg_sampling_period
+            print("sfreq calculated from timestamps:", sfreq)
+        else:
+            sfreq=250
+
+        print("sfreq:",sfreq) 
+
+        if check_processed_from_columns(df_data, processed_data_keywords):
+            print("The data appears to be processed.")
+            cleanliness_messages.append(f"Sampling frequency is determined: {sfreq}")
+            return df_data, sfreq,cleanliness_messages # Return the DataFrame and None for sfreq
+
+        eeg_data = df_data.values.T
+
+        # Create MNE info structure
+        ch_names = df_data.columns.tolist()
+        ch_types = ['eeg'] * len(ch_names)
+        info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types=ch_types)
+
+        # Create RawArray
+        raw = mne.io.RawArray(data=eeg_data, info=info)
+        print(f"Number of samples read: {len(raw)}")
+        print("Sampling frequency is determined:",sfreq)
+        cleanliness_messages.append(f"Sampling frequency is determined: {sfreq}")
+    
+
+
+        return raw, sfreq,cleanliness_messages
+
+    except Exception as e:
+        print(f"An error occurred while processing {file_path}: {e}")
+        return None, None,None    
+    
+
 def is_data_clean(df):
     # Check for NaN values in the data
     if df.isnull().any().any():
@@ -484,28 +605,43 @@ def visualize_3d_brain_model(raw):
     plotter = fig.plotter
 
     # Offset for text annotation
-    offset = np.array([0.0, -0.02, -0.012])  # Adjust this offset as needed
+    offset = np.array([-0.01, -0.03, -0.01])  # Adjust this offset as needed
 
     label_actors = {}
    
 
     # Loop through each channel position and add a text label to the plotter
     for ch_name, pos in ch_pos.items():
-        # Apply an offset to each position for better visibility
         text_pos = pos + offset
-        # Here, pos is a NumPy array with 3 elements: x, y, and z
-        plotter.add_point_labels([text_pos], [ch_name], point_size=20, font_size=20, text_color='black')
+        text_mesh = create_3d_text_mesh(ch_name, text_pos)
+        plotter.add_mesh(text_mesh, color='black')
         
-
-    # Render the plotter to show the text annotations
-    plotter.render()
-    plt.show()
-
-    # Wait for the plot to be closed
-    plt.waitforbuttonpress()
-    
+    plotter.export_gltf('brain_model.gltf') 
 
     return fig
+
+def create_3d_text_mesh(text, position, scale=0.01, offset=0.025):
+    """ Create a 3D text mesh at a specified position with an offset. """
+    text_src = vtk.vtkVectorText()
+    text_src.SetText(text)
+    
+    # Calculate the direction to offset the text based on the head surface normals
+    # This is a simple example where we move the text along the Z-axis
+    direction = np.array([0, 0, 1])  # Simple upward direction, adjust based on actual head geometry
+    offset_position = position + direction * offset
+    
+    # Create a transform to position and scale the text
+    transform = vtk.vtkTransform()
+    transform.Translate(offset_position)
+    transform.Scale(scale, scale, scale)
+    
+    transform_filter = vtk.vtkTransformPolyDataFilter()
+    transform_filter.SetTransform(transform)
+    transform_filter.SetInputConnection(text_src.GetOutputPort())
+    transform_filter.Update()
+    
+    # Convert VTK data to a PyVista mesh
+    return pyvista.wrap(transform_filter.GetOutput())
 
 def get_sensor_positions(raw):
     positions = {}
@@ -519,70 +655,100 @@ def add_preprocessing_step(step_description, preprocessing_steps):
     preprocessing_steps.add(step_description)
 
 def preprocess_channel_data(channel_data, sfreq, l_freq_hp, h_freq_lp, preprocessing_steps):
-
-    channel_data = filter_data(channel_data, sfreq, l_freq=l_freq_hp, h_freq=h_freq_lp, verbose=False)
+    channel_data = filter_data(channel_data, sfreq, l_freq=h_freq_lp, h_freq=l_freq_hp, verbose=False)
     add_preprocessing_step(f"High-pass filtered at {l_freq_hp}Hz and low-pass filtered at {h_freq_lp}Hz with sample frequency {sfreq}Hz.", preprocessing_steps)
-    return channel_data
+    return channel_data, True  # Assume success
 
 
 
-def preprocess_raw_eeg(raw, sfreq,session_name):
+def preprocess_raw_eeg(raw, sfreq, session_name):
     preprocessing_steps = set()
 
-    channel_mapping = {'EEG 0': 'Fp1','EEG 1': 'Fp2','EEG 2': 'F7','EEG 3': 'F3',
-                     'EEG 4': 'Fz','EEG 5': 'F4', 'EEG 6': 'F8', 'EEG 7': 'FC5','EEG 8': 'FC1',
-                    'EEG 9': 'FC2','EEG 10': 'FC6', 'EEG 11': 'T3',
-                    'EEG 12': 'C3','EEG 13': 'Cz', 'EEG 14': 'C4', 'EEG 15': 'T4',
-                    'EEG 16': 'CP5', 'EEG 17': 'CP1','EEG 18': 'CP2','EEG 19': 'CP6','EEG 20': 'T5',
-                    'EEG 21': 'P3','EEG 22': 'Pz','EEG 23': 'P4','EEG 24': 'T6',
-                    'EEG 25': 'PO3','EEG 26': 'PO4', 'EEG 27': 'O1', 'EEG 28': 'Oz',
-                         'EEG 29': 'O2','EEG 30': 'A1',   'EEG 31': 'A2', }
-    
+    channel_mapping = {
+        'EEG 0': 'Fp1', 'EEG 1': 'Fp2', 'EEG 2': 'F7', 'EEG 3': 'F3',
+        'EEG 4': 'Fz', 'EEG 5': 'F4', 'EEG 6': 'F8', 'EEG 7': 'FC5', 'EEG 8': 'FC1',
+        'EEG 9': 'FC2', 'EEG 10': 'FC6', 'EEG 11': 'T3', 'EEG 12': 'C3', 'EEG 13': 'Cz',
+        'EEG 14': 'C4', 'EEG 15': 'T4', 'EEG 16': 'CP5', 'EEG 17': 'CP1', 'EEG 18': 'CP2',
+        'EEG 19': 'CP6', 'EEG 20': 'T5', 'EEG 21': 'P3', 'EEG 22': 'Pz', 'EEG 23': 'P4',
+        'EEG 24': 'T6', 'EEG 25': 'PO3', 'EEG 26': 'PO4', 'EEG 27': 'O1', 'EEG 28': 'Oz',
+        'EEG 29': 'O2', 'EEG 30': 'A1', 'EEG 31': 'A2'
+    }
+
     raw.rename_channels(channel_mapping)
     montage = mne.channels.make_standard_montage('standard_1020')
     raw.set_montage(montage)
-    
+    raw.filter(l_freq=0.5, h_freq=60.0, fir_design='firwin')
 
-    # Run ICA to remove artifacts.
     ica = ICA(n_components=10, random_state=97, max_iter=800)
     ica.fit(raw)
-    raw = ica.apply(raw)
+    raw_ica = ica.apply(raw.copy())
     add_preprocessing_step("Applied ICA for artifact removal.", preprocessing_steps)
 
-    # Instantiate NoisyChannels with the filtered raw data.
-    noisy_detector = NoisyChannels(raw)
-
-    # Adjust the thresholds for finding bad channels if necessary.
+    noisy_detector = NoisyChannels(raw_ica)
     noisy_detector.find_bad_by_correlation()
     noisy_detector.find_bad_by_deviation()
-
-    # Combine all the bad channels.
     bads = noisy_detector.get_bads()
+    raw_ica.info['bads'] = bads
 
-    # Mark bad channels in the info structure.
-    raw.info['bads'] = bads
-
-    # Interpolate bad channels using good ones.
     if bads:
-        raw.drop_channels(bads)
-        add_preprocessing_step(f"Interpolated bad channels for {session_name}: {bads}", preprocessing_steps)
+        raw_ica.drop_channels(bads)
+        add_preprocessing_step(f"Dropped bad channels for {session_name}: {bads}", preprocessing_steps)
 
-
-    # Extract the data for further processing if needed.
-    eeg_data = raw.get_data()
+    eeg_data = raw_ica.get_data()
     preprocessed_data = np.empty(eeg_data.shape)
+    preprocessed_channels = []
 
     for i, channel in enumerate(eeg_data):
-        preprocessed_data[i] = preprocess_channel_data(channel, sfreq, l_freq_hp=0.5, h_freq_lp=60.0, preprocessing_steps=preprocessing_steps)
+        processed_data, success = preprocess_channel_data(channel, sfreq, l_freq_hp=0.5, h_freq_lp=60, preprocessing_steps=preprocessing_steps)
+        preprocessed_data[i] = processed_data
+        if success:
+            preprocessed_channels.append(raw_ica.ch_names[i])  # Store successfully processed channel names
 
-    # Create an MNE RawArray object with the preprocessed data.
-    ch_names = raw.info['ch_names']
-    info = create_info(ch_names=ch_names, sfreq=sfreq, ch_types='eeg')
+    info = create_info(ch_names=preprocessed_channels, sfreq=sfreq, ch_types='eeg')
     preprocessed_raw = RawArray(preprocessed_data, info)
 
-    return preprocessed_raw, list(preprocessing_steps)
+    # Return the necessary objects for plotting
+    return raw, preprocessed_raw, preprocessed_channels, list(preprocessing_steps)
 
+def plot_comparison(original, processed, title, channels_to_display):
+    n_channels = len(channels_to_display)
+    cols = 5  # Columns per row
+    rows_per_type = (n_channels + cols - 1) // cols  # Rows needed per data type (original/processed)
+    total_rows = rows_per_type * 2  # Total rows
 
+    fig_width = cols * 4  # Width of the figure, with each subplot approximately 4 inches wide
+    fig_height = total_rows * 2  # Height of the figure, with each subplot approximately 2 inches tall
+    fig, axes = plt.subplots(total_rows, cols, figsize=(fig_width, fig_height), sharex=True, sharey=True)
+    fig.suptitle(title, fontsize=16)
+
+    if total_rows == 1:
+        axes = np.array([axes])
+
+    for i, ch_name in enumerate(channels_to_display):
+        row_index_orig = (i // cols) * 2
+        col_index = i % cols
+        row_index_proc = row_index_orig + 1
+
+        # Get the data
+        data_orig, times_orig = original[ch_name, :]
+        data_proc, times_proc = processed[ch_name, :]
+
+        # Plot original data
+        ax_orig = axes[row_index_orig, col_index]
+        ax_orig.plot(times_orig, data_orig.T, color='blue', linewidth=1)
+        ax_orig.set_title(f'{ch_name} Orig', fontsize=10)
+        ax_orig.set_ylabel('µV', fontsize=8)
+        ax_orig.grid(True, linestyle='--', alpha=0.5)
+
+        # Plot processed data
+        ax_proc = axes[row_index_proc, col_index]
+        ax_proc.plot(times_proc, data_proc.T, color='green', linewidth=1)
+        ax_proc.set_title(f'{ch_name} Proc', fontsize=10)
+        ax_proc.set_ylabel('µV', fontsize=8)
+        ax_proc.grid(True, linestyle='--', alpha=0.5)
+
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.1, hspace=0.4, wspace=0.3)
+    plt.show()
 
 def extract_features_from_channel(channel_data, sfreq, epoch_length=1.0):
     # Assuming channel_data is a 1D numpy array
@@ -961,7 +1127,7 @@ def extract_features_csp(raw, sfreq, labels, epoch_length=1.0):
     combined_features = []
 
     # Calculate time-domain features for each CSP-transformed epoch
-    for epoch in csp_features:
+    for epoch in epochs_data:
         epoch_features = []
         for channel_data in epoch:
             # You can handle NaN values here as shown previously or use an imputer later
@@ -3044,6 +3210,13 @@ def mat_modeling_svc(subject_identifier, features_df, labels):
     trial_labels_sentences = [label_descriptions[label] for label in trial_labels]    
     labels_message = f"Labels for each trial for subject {subject_identifier}: {trial_labels_sentences}"
     trial_labels_sentences_array.append(labels_message)
+
+     # Calculate the number of unique classes
+    num_classes = len(set(trial_labels))
+    num_classes_message = f"Number of unique classes for subject {subject_identifier}: {num_classes}"
+    accuracy_mat_svc.append(num_classes_message)  # Save the message about number of classes
+    print(f"Number of unique classes for subject {subject_identifier}: {num_classes}")
+
     
     
     # Loop over your subject_data to perform cross-validation for each subject
@@ -3052,6 +3225,8 @@ def mat_modeling_svc(subject_identifier, features_df, labels):
         y = LabelEncoder().fit_transform(data['features'].iloc[:, -1])  # Labels: the last column
         X_scaled = StandardScaler().fit_transform(X)  # Standardize features
         class_distribution = Counter(y)
+        class_distribution_message = f"Class distribution for subject {subject_identifier}: {dict(class_distribution)}"
+        accuracy_mat_svc.append(class_distribution_message)  # Save the message about class distribution
         print("Class distribution:", class_distribution)
 
         for label, count in class_distribution.items():
@@ -3102,113 +3277,110 @@ def mat_modeling_svc(subject_identifier, features_df, labels):
                                 f"F1 Score: {mean_f1_score * 100:.2f}%")
             accuracy_mat_svc.append(accuracy_message)  # Store the message in the list
             print(accuracy_message)
-    #print(trial_labels_sentences_array)
+    print(accuracy_mat_svc)
     return accuracy_mat_svc,trial_labels_sentences_array
 
 
 def train_test_split_models(subject_identifier, features_df, labels, model_name, test_size=0.2):
-
     labels = np.array(labels)  # Convert labels to a NumPy array if it's not already
+    
+    metrics = {}
+    details_split = []  # This will store details about the data split in a descriptive manner
 
-    metrics={}
-
-    # Make sure that features and labels have the same length
+    # Ensure that features and labels have the same length.
     min_length = min(len(features_df), len(labels))
     features_df = features_df.iloc[:min_length, :]
     labels = labels[:min_length]
 
-    # Now that features and labels are consistent, you can proceed
+    # Calculate the number of unique classes and store the original number of trials.
+    unique_classes = len(np.unique(labels))
+    original_num_trials = len(labels)
+
+    # Data splitting using Stratified Shuffle Split for balanced class distribution in splits.
     stratified_split = StratifiedShuffleSplit(n_splits=1, test_size=test_size)
     for train_idx, test_idx in stratified_split.split(features_df.iloc[:, :-1], labels):
-        X_train = features_df.iloc[train_idx, :-1]  # Features: all columns except the last
+        X_train = features_df.iloc[train_idx, :-1]
         X_test = features_df.iloc[test_idx, :-1]
         y_train = labels[train_idx]
         y_test = labels[test_idx]
 
-    # Standardize the features
+    # Record number of trials in train and test splits.
+    num_train_trials = len(y_train)
+    num_test_trials = len(y_test)
+
+    # Verify split correctness.
+    split_correctness = original_num_trials == (num_train_trials + num_test_trials)
+    split_correctness_str = "correct" if split_correctness else "incorrect"
+
+    # Append detailed split information in a descriptive format.
+    details_split.append(f"For subject {subject_identifier}, with {unique_classes} unique classes and originally {original_num_trials} trials: "
+                         f"The dataset was split into {num_train_trials} training trials ({(num_train_trials/original_num_trials)*100:.2f}%) and "
+                         f"{num_test_trials} testing trials ({(num_test_trials/original_num_trials)*100:.2f}%). "
+                         f"This split is {split_correctness_str} as the sum of train and test trials matches the original number of trials.")
+
+    # Standardize the features.
     scaler = StandardScaler().fit(X_train)
     X_train_scaled = scaler.transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    # Fit LabelEncoder on the training labels and transform both train and test labels
+    # Label encoding.
     label_encoder = LabelEncoder()
     y_train_encoded = label_encoder.fit_transform(y_train)
     y_test_encoded = label_encoder.transform(y_test)
 
-    # Define the model file name based on the model_name parameter
-    model_file_mapping = {
+    # Load and predict using the model based on the model name.
+    model_file_name = {
         'svc': 'svc_model.joblib',
         'random': 'randomforest_model.joblib',
-        'logistic':'logistic_regression_model.joblib',
+        'logistic': 'logistic_regression_model.joblib',
         'knn': 'knn_model.joblib',
         'cnn': 'cnn_model.h5',
-
-    }
-
-    # Get the file name for the specific model
-    model_file_name = model_file_mapping.get(model_name)
-
+    }.get(model_name)
+    
     if not model_file_name:
         raise ValueError("Invalid model name provided.")
-
-    # Define the path to the model file
-    model_directory_mat = 'saved_models_mat'
-    model_path = os.path.join(model_directory_mat, model_file_name)
-
-    # Load the selected model and make predictions
-    if model_name == 'cnn':  # Keras model has a different file extension
+    
+    model_path = os.path.join('saved_models_mat', model_file_name)
+    if model_name == 'cnn':
         model = load_model(model_path)
-        # Reshape the data for CNN
         X_test_reshaped = X_test_scaled.reshape((X_test_scaled.shape[0], X_test_scaled.shape[1], 1))
         predictions = model.predict(X_test_reshaped)
         y_pred_encoded = np.argmax(predictions, axis=1)
-    else:  # Sklearn models
+    else:
         model = load(model_path)
         y_pred_encoded = model.predict(X_test_scaled)
 
-    # Calculate accuracy, precision, recall, and F1 score
-    test_accuracy = accuracy_score(y_test_encoded, y_pred_encoded)*100
-    test_precision = precision_score(y_test_encoded, y_pred_encoded, average='weighted')*100
-    test_recall = recall_score(y_test_encoded, y_pred_encoded, average='weighted')*100
-    test_f1_score = f1_score(y_test_encoded, y_pred_encoded, average='weighted')*100
+    # Calculate metrics.
+    test_accuracy = accuracy_score(y_test_encoded, y_pred_encoded) * 100
+    test_precision = precision_score(y_test_encoded, y_pred_encoded, average='weighted') * 100
+    test_recall = recall_score(y_test_encoded, y_pred_encoded, average='weighted') * 100
+    test_f1_score = f1_score(y_test_encoded, y_pred_encoded, average='weighted') * 100
     test_confusion_matrix = confusion_matrix(y_test_encoded, y_pred_encoded)
 
-    # Print metrics
-    print("test accuracy:", test_accuracy)
-    print("test precision:", test_precision)
-    print("test recall:", test_recall)
-    print("test f1 score:", test_f1_score)
-    print("confusion matrix:\n", test_confusion_matrix)
-
-    # Translate the encoded labels back into the original label descriptions
-    label_descriptions = label_encoder.classes_
-    y_pred_descriptions = label_descriptions[y_pred_encoded]
-    y_test_descriptions = label_descriptions[y_test_encoded]
-
-    # Prepare the predictions info
+    # Prepare prediction info.
     all_subjects_predictions = []
-    for true, pred in zip(y_test_descriptions, y_pred_descriptions):
+    label_descriptions = label_encoder.classes_
+    for idx, (true, pred) in enumerate(zip(label_descriptions[y_test_encoded], label_descriptions[y_pred_encoded])):
         correctness = "Correct" if true == pred else "Wrong"
         prediction_info = {
             'subject_identifier': subject_identifier,
             'actual_label': true,
             'predicted_label': pred,
-            'correctness': correctness
+            'correctness': correctness,
+            'test_index': test_idx[idx]
         }
         all_subjects_predictions.append(prediction_info)
 
-    # Prepare a dictionary to hold all metrics
+    # Compile metrics dictionary.
     metrics = {
         'accuracy': test_accuracy,
         'precision': test_precision,
         'recall': test_recall,
         'f1_score': test_f1_score,
-        'confusion_matrix': test_confusion_matrix.tolist()  # Convert to list for JSON serializability if necessary
-    }    
-    print("all subject prediction:",all_subjects_predictions)    
+        'confusion_matrix': test_confusion_matrix.tolist()
+    }
 
-    # Return the collection of predictions for all subject_identifiers
-    return all_subjects_predictions,metrics
+    return all_subjects_predictions, metrics, details_split
 
 def mat_modeling_random(subject_identifier,features_df,labels):
     subject_scores = defaultdict(lambda: defaultdict(list))
@@ -3226,6 +3398,13 @@ def mat_modeling_random(subject_identifier,features_df,labels):
     trial_labels_sentences = [label_descriptions[label] for label in trial_labels]
     labels_message = f"Labels for each trial for subject {subject_identifier}: {trial_labels_sentences}"
     trial_labels_sentences_array.append(labels_message)
+
+    # Calculate the number of unique classes
+    num_classes = len(set(trial_labels))
+    num_classes_message = f"Number of unique classes for subject {subject_identifier}: {num_classes}"
+    accuracy_mat_random.append(num_classes_message)  # Save the message about number of classes
+    print(f"Number of unique classes for subject {subject_identifier}: {num_classes}")
+
     
      
    # Loop over your subject_data to perform cross-validation for each subject
@@ -3233,6 +3412,12 @@ def mat_modeling_random(subject_identifier,features_df,labels):
         X = data['features'].iloc[:, :-1]  # Features: all columns except the last
         y = LabelEncoder().fit_transform(data['features'].iloc[:, -1])  # Labels: the last column
         X_scaled = StandardScaler().fit_transform(X)  # Standardize features
+        class_distribution = Counter(y)
+        class_distribution_message = f"Class distribution for subject {subject_identifier}: {dict(class_distribution)}"
+        accuracy_mat_random.append(class_distribution_message)  # Save the message about class distribution
+        print("Class distribution:", class_distribution)
+
+
 
         # Assuming X_scaled.shape is (n_samples, n_features)
         n_samples, n_features = X_scaled.shape
@@ -3305,6 +3490,13 @@ def mat_modeling_logistic(subject_identifier,features_df,labels):
     trial_labels_sentences = [label_descriptions[label] for label in trial_labels]
     labels_message = f"Labels for each trial for subject {subject_identifier}: {trial_labels_sentences}"
     trial_labels_sentences_array.append(labels_message)
+
+    # Calculate the number of unique classes
+    num_classes = len(set(trial_labels))
+    num_classes_message = f"Number of unique classes for subject {subject_identifier}: {num_classes}"
+    accuracy_mat_logistic.append(num_classes_message)  # Save the message about number of classes
+    print(f"Number of unique classes for subject {subject_identifier}: {num_classes}")
+
     
     
    # Loop over your subject_data to perform cross-validation for each subject
@@ -3312,6 +3504,12 @@ def mat_modeling_logistic(subject_identifier,features_df,labels):
         X = data['features'].iloc[:, :-1]  # Features: all columns except the last
         y = LabelEncoder().fit_transform(data['features'].iloc[:, -1])  # Labels: the last column
         X_scaled = StandardScaler().fit_transform(X)  # Standardize features
+
+        class_distribution = Counter(y)
+        class_distribution_message = f"Class distribution for subject {subject_identifier}: {dict(class_distribution)}"
+        accuracy_mat_logistic.append(class_distribution_message)  # Save the message about class distribution
+        print("Class distribution:", class_distribution)
+
 
         # Assuming X_scaled.shape is (n_samples, n_features)
         n_samples, n_features = X_scaled.shape
@@ -3384,6 +3582,13 @@ def mat_modeling_knn(subject_identifier,features_df,labels):
     trial_labels_sentences = [label_descriptions[label] for label in trial_labels]
     labels_message = f"Labels for each trial for subject {subject_identifier}: {trial_labels_sentences}"
     trial_labels_sentences_array.append(labels_message)
+
+     # Calculate the number of unique classes
+    num_classes = len(set(trial_labels))
+    num_classes_message = f"Number of unique classes for subject {subject_identifier}: {num_classes}"
+    accuracy_mat_knn.append(num_classes_message)  # Save the message about number of classes
+    print(f"Number of unique classes for subject {subject_identifier}: {num_classes}")
+
     
     
    # Loop over your subject_data to perform cross-validation for each subject
@@ -3391,6 +3596,13 @@ def mat_modeling_knn(subject_identifier,features_df,labels):
         X = data['features'].iloc[:, :-1]  # Features: all columns except the last
         y = LabelEncoder().fit_transform(data['features'].iloc[:, -1])  # Labels: the last column
         X_scaled = StandardScaler().fit_transform(X)  # Standardize features
+
+        class_distribution = Counter(y)
+        class_distribution_message = f"Class distribution for subject {subject_identifier}: {dict(class_distribution)}"
+        accuracy_mat_knn.append(class_distribution_message)  # Save the message about class distribution
+        print("Class distribution:", class_distribution)
+
+
 
         # Assuming X_scaled.shape is (n_samples, n_features)
         n_samples, n_features = X_scaled.shape
@@ -3463,6 +3675,13 @@ def mat_modeling_cnn(subject_identifier,features_df,labels):
     trial_labels_sentences = [label_descriptions[label] for label in trial_labels]
     labels_message = f"Labels for each trial for subject {subject_identifier}: {trial_labels_sentences}"
     trial_labels_sentences_array.append(labels_message)
+
+    # Calculate the number of unique classes
+    num_classes = len(set(trial_labels))
+    num_classes_message = f"Number of unique classes for subject {subject_identifier}: {num_classes}"
+    accuracy_mat_cnn.append(num_classes_message)  # Save the message about number of classes
+    print(f"Number of unique classes for subject {subject_identifier}: {num_classes}")
+
     
     
    # Loop over your subject_data to perform cross-validation for each subject
@@ -3470,6 +3689,12 @@ def mat_modeling_cnn(subject_identifier,features_df,labels):
         X = data['features'].iloc[:, :-1]  # Features: all columns except the last
         y = LabelEncoder().fit_transform(data['features'].iloc[:, -1])  # Labels: the last column
         X_scaled = StandardScaler().fit_transform(X)  # Standardize features
+
+        class_distribution = Counter(y)
+        class_distribution_message = f"Class distribution for subject {subject_identifier}: {dict(class_distribution)}"
+        accuracy_mat_cnn.append(class_distribution_message)  # Save the message about class distribution
+        print("Class distribution:", class_distribution)
+
 
         # Assuming X_scaled.shape is (n_samples, n_features)
         n_samples, n_features = X_scaled.shape
@@ -4110,8 +4335,8 @@ def main():
             
             if process_with_builtin_functions:
                 raw, sfreq, labels,data_info = read_mat_eeg(file_path)
-                preprocessed_raw, preprocessing_steps = preprocess_raw_eeg(raw, 250, subject_identifier)
-                features_message, features_df = extract_features_csp(preprocessed_raw, sfreq, labels)
+                original_raw, processed_raw, channels_to_display, preprocessing_steps = preprocess_raw_eeg(raw, sfreq, subject_identifier)
+                features_message, features_df = extract_features_csp(processed_raw, sfreq, labels)
 
                 
                 # Get predictions for the current file
@@ -4125,20 +4350,24 @@ def main():
            
             else:
                 raw_data, sfreq, labels,data_info= read_mat_eeg(file_path) # Handling .mat file 
+                visualize_3d_brain_model(raw_data)
 
                 
-                preprocessed_raw ,preprocessing_steps= preprocess_raw_eeg(raw_data, 250,subject_identifier)
+                #original_raw, processed_raw, channels_to_display, preprocessing_steps = preprocess_raw_eeg(raw_data, sfreq, subject_identifier)
+
+                #plot_comparison(original_raw, processed_raw, 'Comparison Original vs. Processed', channels_to_display)
+
 
                 # for step in preprocessing_steps:
                 #     print(step)
 
 
                 # #features_df = extract_features_mat(preprocessed_raw, sfreq, labels,epoch_length=1.0)
-                message,features_df = extract_features_csp(preprocessed_raw, sfreq, labels, epoch_length=1.0)
+                #message,features_df = extract_features_csp(processed_raw, sfreq, labels, epoch_length=1.0)
 
                 # print(message)
                 
-                accuracy_test=mat_modeling_svc(subject_identifier,features_df,labels)
+                #accuracy_test=mat_modeling_svc(subject_identifier,features_df,labels)
                 # predictions_info = train_test_split_models(subject_identifier, features_df,model_name='svc' ,labels=labels)
                 # print(predictions_info)
                 # for info in predictions_info:
@@ -4190,6 +4419,7 @@ def main():
             print(f"Subject {subject} Accuracy SVC: {average_accuracy_dict_svc[subject] * 100:.2f}%")
             print(f"Subject {subject} Accuracy GradientBoosting: {average_accuracy_dict_gbc[subject] * 100:.2f}%")
             print(f"Subject {subject} Accuracy KNN: {average_accuracy_dict_knn[subject] * 100:.2f}%")
+    
     
     
 

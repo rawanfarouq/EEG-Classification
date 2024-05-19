@@ -9,8 +9,6 @@
     <meta content="Free HTML Templates" name="keywords">
     <meta content="Free HTML Templates" name="description">
 
-    <!-- Favicon -->
-    <link href="/static/img/favicon.ico" rel="icon">
 
     <!-- Google Web Fonts -->
     <link rel="preconnect" href="https://fonts.gstatic.com">
@@ -31,6 +29,8 @@
 
     <!-- Template Stylesheet -->
     <link href="/static/css/style.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
     <style>
         html, body {
             height: 120%;
@@ -155,6 +155,28 @@
             animation: slideIn 1.0s ease-out; /* Animation for the message box */
             font-weight: bold; /* Make text bold */
         }
+        #accuracyContainer-svc,
+        #accuracyContainer-random,
+        #accuracyContainer-logistic,
+        #accuracyContainer-knn,
+        #accuracyContainer-cnn
+        {
+            background: #f8f9fa; /* A light grey background */
+            padding: 5px;
+            width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* A subtle shadow for depth */
+            border-left: 4px solid #007bff; /* A blue left border */
+            margin-bottom: 20px; /* Spacing below the container */
+            animation: slideIn 1.0s ease-out; /* Animation for the message box */
+            font-weight: bold; /* Make text bold */
+        }
+        #model3DContainer {
+            width: 1106px;  /* Ensures it takes full width of the modal body */
+            height: 450px; /* Fixed height */
+        }
      
     </style>
 </head>
@@ -215,31 +237,60 @@
             any meaningful analysis can be performed. Our comprehensive workflow includes preprocessing steps 
             to remove these unwanted signals, feature extraction to identify the characteristics most relevant 
             to your study, and the application of machine learning models for data classification.
+            <br>
         </p>
+       
         <p class="mb-4">
+            View the EEG channels on our interactive 3D brain model to better understand the data and its implications. Explore the model in detail by clicking the button below.
+            <!-- Button to open the modal -->
+            <button type="button" class="btn btn-info" data-toggle="modal" data-target="#model3DModal">
+                View 3D Model
+            </button>
+            <!-- Modal for 3D Model -->
+            <div class="modal fade" id="model3DModal" tabindex="-1" aria-labelledby="model3DModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                    <h5 class="modal-title" id="model3DModalLabel">3D Human Brain Model with EEG Channels</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                    </div>
+                    <div class="modal-body" style="height: 500px;">
+                    <!-- Placeholder for 3D model -->
+                    <div id="model3DContainer"></div>
+                    </div>
+                </div>
+                </div>
+            </div>   
+          <br>
             We will proceed step by step, starting with the data information then with the crucial preprocessing of your EEG data. When you're 
             ready to begin, please click the button below to initiate the data info stage.
         </p>
 
-        <div class="text-center" style="margin-top: 2rem; margin-left: auto; margin-right: auto; width: fit-content;">
-            <button id="dataInfoButton" class="btn btn-outline-primary my-2 mr-2" onclick="toggleDataInfo()" style="font-size: medium; padding: 10px 20px; border-radius: 5px;">Data Info</button>
-            <div id="dataInfoContainer" class="alert alert-info" style="display: none;"></div>
-
-            <button id="toggleButton" class="btn btn-primary my-2 mr-2" onclick="toggleStepsContainer()">View Process Data</button>
+        <div class="text-center" style="margin-top: 2rem; margin-left: auto; margin-right: auto; width: fit-content; display: flex; flex-direction: column; align-items: center;">
+            <button id="dataInfoButton" class="btn btn-outline-primary my-2" onclick="toggleDataInfo()" style="font-size: medium; padding: 10px 20px; border-radius: 5px;">Data Info</button>
+            <div id="dataInfoContainer" class="alert alert-info" style="display: none; width: 100%;"></div>
+        
+            <button id="toggleButton" class="btn btn-primary my-2" onclick="toggleStepsContainer()">View Process Data</button>
+            <button id="togglePlotButton" class="btn btn-outline-dark my-2" style="display: none; font-size: medium; padding: 10px 20px; border-radius: 5px;" onclick="togglePlots()">View Plots</button>
+            <div id="plotDiv" style="width:100%; height:100%;"></div>
+        
             <!-- Spinner element (hidden by default) -->
-        <div id="loadingSpinner" class="text-center" style="display: none;">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
+            <div id="loadingSpinner" class="text-center" style="display: none;">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
             </div>
-        </div>
-        <div id="stepsContainer">
-            <h2>Preprocessing Steps:</h2>
-            <ul id="stepsList"></ul>
-            <p id="noSteps" class="no-steps">No preprocessing steps available.</p>
-        </div>
-           
+        
+            <div id="stepsContainer">
+                <h2>Preprocessing Steps:</h2>
+                <ul id="stepsList"></ul>
+                <p id="noSteps" class="no-steps">No preprocessing steps available.</p>
+            </div>
+        
             <div class="row justify-content-center">
-                <button id="extractFeaturesButton" class="btn btn-success my-2 mr-2" onclick="extractFeatures()" style="display: none; ">Extract CSP Features</button>
+                <button id="extractFeaturesButton" class="btn btn-success my-2" onclick="extractFeatures()" style="display: none;">Extract CSP Features</button>
                 <div id="loadingSpinner1" class="text-center" style="display: none;">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Loading...</span>
@@ -290,7 +341,6 @@
             </form>
             <!-- Add this for each model -->
             <div id="accuracyContainer-svc" class="mt-4" style="display: none;">
-                <ul id="accuracyList-svc" class="list-group"></ul>
                 <button id="predictButton-svc" class="btn btn-outline-dark" type="button" onclick="redirectToPredictPage('svc')" style="display: none;">Predict SVC Model</button>
 
             </div>
@@ -335,6 +385,91 @@
             </div>
         </div>
         </div>
+
+
+        <script type="module">
+            import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.135.0/build/three.module.js';
+            import { OrbitControls } from 'https://threejsfundamentals.org/threejs/resources/threejs/r122/examples/jsm/controls/OrbitControls.js';
+            import { GLTFLoader } from 'https://threejsfundamentals.org/threejs/resources/threejs/r122/examples/jsm/loaders/GLTFLoader.js';
+
+            $('#model3DModal').on('shown.bs.modal', function() {
+                if (!renderer) {  // Check if the renderer has been created to avoid reinitialization
+                    init();
+                    animate();
+                }
+            });
+    
+            let scene, camera, renderer, controls;
+    
+            function init() {
+                const container = document.getElementById('model3DContainer');
+                console.log("Positions",container.clientWidth, container.clientHeight); // Add this in init to check dimensions
+
+                // Clear existing content
+                container.innerHTML = '';
+
+                scene = new THREE.Scene();
+                camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(container.clientWidth, container.clientHeight);
+                renderer.setClearColor(0xffffff);  // Set background color to white
+
+                container.appendChild(renderer.domElement);
+
+    
+                controls = new OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+    
+                const ambientLight = new THREE.AmbientLight(0xFFD8C0);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+                directionalLight.position.set(0, 1, 0);
+                scene.add(ambientLight);
+                scene.add(directionalLight);
+    
+                // Load a GLTF model
+                const loader = new GLTFLoader();
+                loader.load(
+                    '/static/img/head.gltf',
+                    function (gltf) {
+                        gltf.scene.traverse((child) => {
+                    if (child.isMesh) {
+                        console.log(child.material); // Log the material to check its properties
+                        child.material = new THREE.MeshStandardMaterial({ color: 0x555555 });
+                    }
+                });
+                        scene.add(gltf.scene);
+                        gltf.scene.scale.set(10, 10, 10); // Adjust scale if necessary
+                        gltf.scene.position.set(0, 0, 0); // Center the model
+
+                    },
+                    undefined,
+                    function (error) {
+                        console.error('An error happened during loading the model:', error);
+                    }
+                );
+    
+                camera.position.z = 5;
+            }
+    
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update(); // only required if controls.enableDamping = true, or if controls.autoRotate = true
+                renderer.render(scene, camera);
+            }
+
+            function onWindowResize() {
+                const container = document.getElementById('model3DContainer');
+                if (renderer && camera) {
+                    camera.aspect = container.clientWidth / container.clientHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(container.clientWidth, container.clientHeight);
+                }
+            }
+
+        window.addEventListener('resize', onWindowResize);
+    
+        </script>        
 
 <script>
 
@@ -502,11 +637,15 @@ function fetchPreprocessingSteps() {
     var noSteps = document.getElementById('noSteps');
     var toggleButton = document.getElementById('toggleButton');
     var spinner = document.getElementById('loadingSpinner');
+    var viewPlotsButton = document.getElementById('togglePlotButton'); // Get the View Plots button
+
 
     // Clear existing list
     stepsList.innerHTML = '';
     noSteps.style.display = 'none';
     spinner.style.display = 'block';
+    viewPlotsButton.style.display = 'none'; // Initially hide the View Plots button
+
 
     // AJAX call to the server to fetch preprocessing steps
     fetch('{{ url_for("file_reader.mat_classification") }}', {
@@ -528,6 +667,8 @@ function fetchPreprocessingSteps() {
                 displayPreprocessingSteps();
                 // Show the Extract CSP Features button
                 document.getElementById('extractFeaturesButton').style.display = 'block';
+                viewPlotsButton.style.display = 'block'; // Show the View Plots button
+
                 // Now show the steps container
                 stepsContainer.style.display = 'block';
                 toggleButton.textContent = 'Hide Process Data';
@@ -542,6 +683,113 @@ function fetchPreprocessingSteps() {
     });
 }
 
+let plotsFetched = false; // Flag to check if plots have been fetched
+
+
+function viewPlots() {
+    var spinner = document.getElementById('loadingSpinner');
+    
+
+    console.log("Entered view plots");
+    if (!plotsFetched) {
+        spinner.classList.remove('d-none');
+        console.log("Fetching and plotting data...");
+        fetch('{{ url_for("file_reader.get_plot_data") }}', {
+            method: 'GET'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+    .then(data => {
+        spinner.classList.add('d-none');
+
+        const rows = Math.ceil(data.channels.length / 5) * 2; // two rows per channel
+        const cols = 5;
+        let layout = {
+            title: 'Comparison Original vs. Processed',
+            showlegend: false,
+            grid: {rows: rows, columns: cols, pattern: 'independent'},
+            height: rows * 300, // Adjust height based on the number of rows
+            width: 1500 // Adjust width if necessary
+        };
+
+        // Dynamically create axis titles
+        data.channels.forEach((channel, index) => {
+            const baseIndex = (Math.floor(index / 5) * 10) + (index % 5) + 1;
+            layout['xaxis' + baseIndex] = {
+                title: `${channel} - Original`
+            };
+            layout['yaxis' + baseIndex] = {
+                title: 'Amplitude (µV)'
+            };
+            layout['xaxis' + (baseIndex + 5)] = {
+                title: `${channel} - Processed`
+            };
+            layout['yaxis' + (baseIndex + 5)] = {
+                title: 'Amplitude (µV)'
+            };
+        });
+
+        let traces = [];
+        
+        data.channels.forEach((channel, index) => {
+            const baseIndex = (Math.floor(index / 5) * 10) + (index % 5) + 1;
+            const xAxisOrig = 'x' + baseIndex;
+            const yAxisOrig = 'y' + baseIndex;
+            const xAxisProc = 'x' + (baseIndex + 5);
+            const yAxisProc = 'y' + (baseIndex + 5);
+
+            // Original data trace
+            traces.push({
+                x: data.times,
+                y: data.raw_data[index],
+                type: 'scatter',
+                mode: 'lines',
+                name: `${channel} Original`,
+                xaxis: xAxisOrig,
+                yaxis: yAxisOrig
+            });
+
+            // Processed data trace
+            traces.push({
+                x: data.times,
+                y: data.preprocessed_data[index],
+                type: 'scatter',
+                mode: 'lines',
+                name: `${channel} Processed`,
+                xaxis: xAxisProc,
+                yaxis: yAxisProc
+            });
+        });
+
+        Plotly.newPlot('plotDiv', traces, layout);
+        plotsFetched = true; // Set the flag to true after plotting
+
+    })
+    .catch(error => {
+        console.error('Failed to fetch plot data:', error);
+    });
+}
+}
+
+function togglePlots() {
+    const plotDiv = document.getElementById('plotDiv');
+    const toggleButton = document.getElementById('togglePlotButton');
+
+
+    if (plotDiv.style.display === 'none') {
+
+        plotDiv.style.display = 'block'; // Show the plots
+        toggleButton.textContent = 'Hide Plots';
+        viewPlots(); // Call viewPlots to fetch and plot if not already done
+    } else {
+        plotDiv.style.display = 'none'; // Hide the plots
+        toggleButton.textContent = 'View Plots';
+    }
+}
 
 function displayPreprocessingSteps() {
     var stepsList = document.getElementById('stepsList');
@@ -615,27 +863,100 @@ function displayLoadingAccuracy() {
 
 function displayAccuracyResults(model, accuracyData) {
     var accuracyContainer = document.getElementById('accuracyContainer-' + model);
-    var accuracyList = document.getElementById('accuracyList-' + model);
     var predictButton = document.getElementById('predictButton-' + model);
+    if (!accuracyContainer) {
+        console.error('Accuracy container not found for model:', model);
+        return;
+    }
 
-    // Clear previous results and set the display style
-    accuracyList.innerHTML = '';
     accuracyContainer.style.display = 'block';
     predictButton.style.display = 'block';
 
+    // Clear previous results
+    accuracyContainer.innerHTML = '';
+    var accordion = document.createElement('div');
+    accordion.className = 'accordion';
+    accordion.id = 'accordion-' + model;
 
-    // Create a list item for each accuracy message and append it to the list
-    accuracyData.forEach(function(accuracyMessage) {
-        var li = document.createElement('li');
-        li.className = 'list-group-item'; // Use Bootstrap class for styling
+    // Group data by session
+    var groupedData = groupSessionData(accuracyData);
+
+    // Create cards for each grouped session data
+    Object.keys(groupedData).forEach(function(sessionKey, index) {
+        var card = document.createElement('div');
+        card.className = 'card';
+
+        var cardHeader = document.createElement('div');
+        cardHeader.className = 'card-header';
+        cardHeader.id = 'heading-' + model + '-' + index;
+
+        var buttonText = sessionKey.includes('Average Metrics across sessions') ? 'Metrics Across Sessions' : 'Details for ' + sessionKey;
         
-        // Convert the accuracy message into a formatted HTML string
-        var formattedMessage = accuracyMessage.replace(/, /g, '<br>'); // Replace commas with line breaks
-        li.innerHTML = formattedMessage; // Set the HTML content of the list item
-        accuracyList.appendChild(li); // Append the list item to the list
-    });
-    document.getElementById('predictButton-' + model).style.display = 'block';
+        var headerButton = document.createElement('button');
+        headerButton.className = 'btn btn-link collapsed'; // Start collapsed
+        headerButton.setAttribute('data-toggle', 'collapse');
+        headerButton.setAttribute('data-target', '#collapse-' + model + '-' + index);
+        headerButton.setAttribute('aria-expanded', 'false');
+        headerButton.setAttribute('aria-controls', 'collapse-' + model + '-' + index);
+        headerButton.innerHTML = buttonText;
+        cardHeader.appendChild(headerButton);
 
+        var collapseDiv = document.createElement('div');
+        collapseDiv.id = 'collapse-' + model + '-' + index;
+        collapseDiv.className = 'collapse';
+        collapseDiv.setAttribute('aria-labelledby', 'heading-' + model + '-' + index);
+        collapseDiv.setAttribute('data-parent', '#accordion-' + model);
+
+        var cardBody = document.createElement('div');
+        cardBody.className = 'card-body';
+        // Adjust the formatting here
+        cardBody.innerHTML = formatMetrics(groupedData[sessionKey]);
+        collapseDiv.appendChild(cardBody);
+
+        card.appendChild(cardHeader);
+        card.appendChild(collapseDiv);
+        accordion.appendChild(card);
+    });
+
+    accuracyContainer.appendChild(accordion);
+    accuracyContainer.append(predictButton);
+}
+
+function formatMetrics(sessionData) {
+    return sessionData.map(line => {
+        if (line.includes('Class distribution for subject')) {
+            // Format the class distribution lines and add an extra line break after
+            line = line.replace(/\{|\}/g, '') // Remove braces
+                       .replace(/, /g, '<br>'); // Replace commas with line breaks
+            return line.replace(/: /g, ': ') + '<br>'; // Ensure colon and number are on the same line and add a break after
+        } else if (line.includes('Metrics for ') || line.includes('Average Metrics across sessions')) {
+            // Format the metrics lines and add an extra line break before and after
+            line = line.replace(/: /g, ':<br>'); // Insert a line break right after the colon
+            return '<br>' + line.replace(/, /g, '<br>') + '<br>';
+        } else {
+            // Handle other lines normally and add a break after
+            return line + '<br>';
+        }
+    }).join('<br>');
+}
+
+function groupSessionData(accuracyData) {
+    var grouped = {};
+    var currentSession = '';
+    accuracyData.forEach(function(message) {
+        var sessionMatch = message.match(/Number of unique classes for subject (sub-\d+_ses-\d+)/);
+        if (sessionMatch) {
+            currentSession = sessionMatch[1]; // Update current session identifier
+            grouped[currentSession] = grouped[currentSession] || [];
+        } else if (message.includes('Average Metrics across sessions')) {
+            currentSession = 'Average Metrics across sessions'; // Special handling for average metrics
+            grouped[currentSession] = grouped[currentSession] || [];
+        }
+        if (currentSession) {
+            grouped[currentSession].push(message); // Add message to current session group
+        }
+    });
+    return grouped;
 }
 
 
@@ -741,5 +1062,11 @@ function redirectToPredictPage(model) {
 
    
 </script>
+<!-- jQuery first, then Popper.js, then Bootstrap JS -->
+<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.min.js"></script>
 </body>
 </html>

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>EEG Hub - Plot Viewer</title>
+    <title>EEG Hub - EEG Analysis Website</title>
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
     <meta content="Free HTML Templates" name="keywords">
     <meta content="Free HTML Templates" name="description">
@@ -45,22 +45,50 @@
             color: #007bff;
             margin-bottom: 30px;
         }
-        .plot-container {
+        form {
             width: 100%;
-            max-width: 800px; /* Adjust the maximum width as needed */
+            max-width: 400px;
             background-color: #fff;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            margin-top: 20px;
         }
-        .plot-image {
+        label {
+            display: block;
+            margin-bottom: 10px;
+            color: #495057;
+            font-weight: 400;
+        }
+        input[type="file"] {
             width: 100%;
-            height: auto;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="submit"] {
+            width: 100%;
+            background-color: #007bff;
+            color: white;
+            padding: 10px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 400;
+        }
+        input[type="submit"]:hover {
+            background-color: #0069d9;
+        }
+        #alertBox {
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
+     
+    
     <!-- Topbar Start -->
     <div class="container-fluid bg-light ps-5 pe-0 fixed-top">
         <div class="row gx-0">
@@ -104,84 +132,84 @@
     </nav>
     <!-- Navbar End -->
 
-    <!-- Main Content Start -->
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-lg-8">
-                <h1 class="text-center">EEG Plot Viewer</h1>
-                <!-- Dropdown Menu -->
-                <div class="mb-3">
-                    <label for="channelSelect" class="form-label">Select Channel:</label>
-                    <select class="form-select" id="channelSelect">
-                        <!-- Dropdown options will be dynamically added here -->
-                    </select>
-                </div>
-                <!-- Plot Container -->
-                <div class="plot-container">
-                    <img id="plotImage" class="plot-image" src="" alt="Selected Plot">
-                </div>
+    
+     <!-- Main Content Start -->
+     <div class="container d-flex flex-column justify-content-center align-items-center" style="min-height: 100vh; padding-top: 180px;">
+        <div class="row justify-content-center align-items-center w-100">
+            <div class="col-lg-6 col-md-8">
+                <form action="/upload" method="POST" enctype="multipart/form-data" class="bg-white p-4 shadow rounded">
+                    <h1 class="text-center mb-4">Upload your EEG data</h1>
+                    <label for="file_path_upload">Upload your EEG folder (MAT or Excel):</label>
+                    <input type="file" id="file_path_upload" name="file_path_upload" webkitdirectory directory multiple required class="form-control mb-3">
+                    <!-- Inside your form, before the submit button -->
+                    <div id="loadingSpinner" class="text-center d-none">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <!-- The rest of your form -->
+                    <input type="submit" value="Upload File" class="btn btn-primary w-100">
+                </form>
+                
+                <div id="alertBox"><!-- Alert messages will appear here --></div>
             </div>
         </div>
     </div>
+    <!-- Main Content End -->
+
+
+
     <div class="container-fluid text-light py-4" style="background: #051225;">
-        <!-- Footer content -->
+        <div class="container">
+            <div class="row g-0">
+                <div class="col-md-6 text-center text-md-start">
+                    <p class="mb-md-0">&copy; <a class="text-white border-bottom" href="#">EEG Hub 2024</a>. All Rights Reserved.</p>
+                </div>
+                
+            </div>
+        </div>
     </div>
-    <!-- Footer End -->
 
-    <!-- JavaScript Libraries -->
-    <!-- Include JavaScript libraries -->
-
-    <!-- Custom JavaScript -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-
-    <!-- Custom JavaScript -->
     <script>
-        $(document).ready(function() {
-            // Function to fetch and display plot based on selected channel
-            function displayPlot(filename) {
-                var imagePath = "static/plots/" + filename; // Update image path
-                console.log("Image src: " + imagePath);
-                $("#plotImage").attr("src", imagePath)
-                    .on("error", function() {
-                        $(this).attr("src", ""); // Clear image source on error
-                        console.error("Image not found:", imagePath);
-                        // You can display a message here to inform the user
-                    });
-            }
-
-            // Function to fetch image filenames from the server
-            function fetchImageFilenames() {
-                $.ajax({
-                    url: "/get_image_filenames",
-                    type: "GET",
-                    success: function(data) {
-                        // Populate the dropdown menu with image filenames
-                        var select = $("#channelSelect");
-                        $.each(data, function(index, filename) {
-                            select.append($("<option>").val(filename).text(filename));
-                        });
-
-                        // Display the first image by default if available
-                        if (data.length > 0) {
-                            var defaultFilename = data[0];
-                            displayPlot(defaultFilename);
-                        }
-                    },
-                    error: function(error) {
-                        console.error("Error fetching image filenames:", error);
-                    }
+        // Wait for the DOM to be ready
+        document.addEventListener("DOMContentLoaded", function() {
+            var form = document.querySelector('form');
+            var alertBox = document.getElementById('alertBox');
+            var spinner = document.getElementById('loadingSpinner');
+        
+            form.addEventListener('submit', function(e) {
+                e.preventDefault(); // Prevent the default form submission
+        
+                // Show the spinner and hide previous alerts
+                spinner.classList.remove('d-none');
+                alertBox.classList.add('d-none');
+        
+                // Create a FormData object, which allows you to send form data as a set of key/value pairs
+                var formData = new FormData(form);
+        
+                // Perform the AJAX request
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function(response) {
+                    return response.text(); // or response.json() if your server returns JSON
+                })
+                .then(function(text) {
+                    // Hide the spinner
+                    spinner.classList.add('d-none');
+        
+                    // Insert the HTML or text you received from your Python Flask server
+                    alertBox.innerHTML = text;
+                    alertBox.classList.remove('d-none');
+                })
+                .catch(function(error) {
+                    console.error('Error:', error);
                 });
-            }
-
-            // Event listener for dropdown menu change
-            $("#channelSelect").change(function() {
-                var selectedChannel = $(this).val();
-                displayPlot(selectedChannel);
             });
-
-            // Call the fetchImageFilenames function to populate the dropdown menu
-            fetchImageFilenames();
         });
-    </script>
+        </script>
+
+
 </body>
 </html>

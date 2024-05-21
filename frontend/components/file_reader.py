@@ -864,11 +864,22 @@ def perform_train_test_mat():
 
         # Retrieve the list of feature CSV paths and subject identifiers from the session
         features_csv_paths = session.get('features_csv_paths')
+        print("features path:", features_csv_paths)
 
         for subject_identifier, features_csv_path in features_csv_paths:
             print("subject iden:", subject_identifier)
             features_df = pd.read_csv(features_csv_path)
-            labels = session.get('labels')
+            print("test test feautres:", features_df)
+            # Extract labels from the last column and then remove this column from features_df
+            labels = features_df.iloc[:, -1].values  # Assuming labels are in the last column
+            print("labels test:", labels)
+
+
+        for subject_identifier, features_csv_path in features_csv_paths:
+            #print("subject iden:", subject_identifier)
+            features_df = pd.read_csv(features_csv_path)
+            # Extract labels from the last column and then remove this column from features_df
+            labels = features_df.iloc[:, -1].values  # Assuming labels are in the last column
 
             # Call the train_test_split_models function for each subject
             subject_predictions, subject_metrics, subject_details_split = train_test_split_models(

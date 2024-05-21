@@ -3287,6 +3287,8 @@ def train_test_split_models(subject_identifier, features_df, labels, model_name,
     metrics = {}
     details_split = []  # This will store details about the data split in a descriptive manner
 
+    print("test features:", features_df)
+
     # Ensure that features and labels have the same length.
     min_length = min(len(features_df), len(labels))
     features_df = features_df.iloc[:min_length, :]
@@ -3297,7 +3299,7 @@ def train_test_split_models(subject_identifier, features_df, labels, model_name,
     original_num_trials = len(labels)
 
     # Data splitting using Stratified Shuffle Split for balanced class distribution in splits.
-    stratified_split = StratifiedShuffleSplit(n_splits=1, test_size=test_size)
+    stratified_split = StratifiedShuffleSplit(n_splits=2, test_size=test_size)
     for train_idx, test_idx in stratified_split.split(features_df.iloc[:, :-1], labels):
         X_train = features_df.iloc[train_idx, :-1]
         X_test = features_df.iloc[test_idx, :-1]
